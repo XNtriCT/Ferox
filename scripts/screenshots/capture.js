@@ -1,5 +1,5 @@
 /**
- * Bravest Browser - README screenshot generator
+ * Ferox Browser - README screenshot generator
  *
  * Renders the real renderer UI (renderer/index.html + style.css) inside an
  * Electron window and captures PNGs of the speed toolbar and the mouse speed
@@ -64,11 +64,11 @@ async function main() {
   await win.webContents.executeJavaScript(`
     (() => {
       const wv = document.querySelector('webview');
-      if (wv) wv.getURL = () => 'https://www.youtube.com/watch?v=bravest-demo';
+      if (wv) wv.getURL = () => 'https://www.youtube.com/watch?v=ferox-demo';
       const badge = document.getElementById('yt-speed-badge');
       if (badge) badge.style.display = 'flex';
       const urlInput = document.getElementById('url-input');
-      if (urlInput) urlInput.value = 'https://www.youtube.com/watch?v=bravest-demo';
+      if (urlInput) urlInput.value = 'https://www.youtube.com/watch?v=ferox-demo';
       const host = document.getElementById('current-site-host');
       if (host) host.textContent = 'www.youtube.com';
       return true;

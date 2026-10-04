@@ -1,12 +1,12 @@
-# Bravest Browser - Setup & Fork Script
+# Ferox Browser - Setup & Fork Script
 # Clones brave-browser, pulls brave-core, and applies the YouTube 3x/4x speed patch
 
 param (
-    [string]$TargetDir = "C:\src\bravest"
+    [string]$TargetDir = "C:\src\ferox"
 )
 
 Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host "  BRAVEST - Brave Browser Fork Setup      " -ForegroundColor Cyan
+Write-Host "  FEROX - Brave Browser Fork Setup      " -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 
 # 1. Check prerequisites
@@ -40,7 +40,7 @@ Write-Host "[4/5] Running npm install & submodule sync..." -ForegroundColor Yell
 npm install
 npm run init
 
-# 5. Apply Bravest YouTube 3x/4x patch to brave-core
+# 5. Apply Ferox YouTube 3x/4x patch to brave-core
 Write-Host "[5/5] Applying YouTube 3x & 4x speed patch to src/brave..." -ForegroundColor Yellow
 $PatchFile = Join-Path $PSScriptRoot "..\patches\brave_core_youtube_speeds.patch"
 if (Test-Path "$TargetDir\src\brave") {

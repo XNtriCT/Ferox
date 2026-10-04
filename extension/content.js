@@ -1,33 +1,33 @@
 /**
- * Bravest Extension - YouTube 3x/4x Speed Turbo Content Script
+ * Ferox Extension - YouTube 3x/4x Speed Turbo Content Script
  */
 
 (function () {
   'use strict';
 
-  if (window.__bravest_ext_initialized) return;
-  window.__bravest_ext_initialized = true;
+  if (window.__ferox_ext_initialized) return;
+  window.__ferox_ext_initialized = true;
 
-  console.log('[Bravest Extension] YouTube 3x/4x Turbo initialized.');
+  console.log('[Ferox Extension] YouTube 3x/4x Turbo initialized.');
 
   const SPEED_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4];
   const QUICK_HUD_PRESETS = [1, 1.5, 2, 3, 4];
 
   function getStoredSpeed(cb) {
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.get(['bravest_speed'], (res) => {
-        cb(parseFloat(res.bravest_speed) || 1.0);
+      chrome.storage.local.get(['ferox_speed', 'bravest_speed'], (res) => {
+        cb(parseFloat(res.ferox_speed || res.bravest_speed) || 1.0);
       });
     } else {
-      cb(parseFloat(localStorage.getItem('bravest_speed')) || 1.0);
+      cb(parseFloat(localStorage.getItem('ferox_speed') || localStorage.getItem('bravest_speed')) || 1.0);
     }
   }
 
   function saveStoredSpeed(speed) {
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.set({ bravest_speed: speed });
+      chrome.storage.local.set({ ferox_speed: speed });
     }
-    localStorage.setItem('bravest_speed', speed.toString());
+    localStorage.setItem('ferox_speed', speed.toString());
   }
 
   function setVideoSpeed(rate) {
@@ -45,10 +45,10 @@
 
   let toastTimeout = null;
   function showToast(text) {
-    let toast = document.getElementById('bravest-toast');
+    let toast = document.getElementById('ferox-toast');
     if (!toast) {
       toast = document.createElement('div');
-      toast.id = 'bravest-toast';
+      toast.id = 'ferox-toast';
       toast.style.cssText = `
         position: absolute;
         top: 12%;
@@ -81,7 +81,7 @@
   }
 
   function updateHudIndicator(rate) {
-    document.querySelectorAll('.bravest-hud-btn').forEach((btn) => {
+    document.querySelectorAll('.ferox-hud-btn').forEach((btn) => {
       const sp = parseFloat(btn.dataset.speed);
       if (Math.abs(sp - rate) < 0.05) {
         btn.style.background = '#ff5500';
@@ -97,10 +97,10 @@
 
   function injectHud() {
     const player = document.querySelector('.html5-video-player');
-    if (!player || document.getElementById('bravest-hud-container')) return;
+    if (!player || document.getElementById('ferox-hud-container')) return;
 
     const hud = document.createElement('div');
-    hud.id = 'bravest-hud-container';
+    hud.id = 'ferox-hud-container';
     hud.style.cssText = `
       position: absolute;
       top: 12px;
@@ -132,7 +132,7 @@
 
     QUICK_HUD_PRESETS.forEach((speed) => {
       const btn = document.createElement('button');
-      btn.className = 'bravest-hud-btn';
+      btn.className = 'ferox-hud-btn';
       btn.dataset.speed = speed.toString();
       btn.textContent = `${speed}x`;
       btn.style.cssText = `
@@ -204,8 +204,8 @@
     getStoredSpeed((stored) => {
       if (stored && stored !== 1.0) {
         document.querySelectorAll('video').forEach((v) => {
-          if (!v.dataset.bravestTracked) {
-            v.dataset.bravestTracked = 'true';
+          if (!v.dataset.feroxTracked) {
+            v.dataset.feroxTracked = 'true';
             v.playbackRate = stored;
             if ('preservesPitch' in v) v.preservesPitch = true;
           }

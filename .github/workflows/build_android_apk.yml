@@ -1,4 +1,4 @@
-name: Build Bravest Android APK
+name: Build Ferox Android APK
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-apk:
-    name: Build Bravest Android APK
+    name: Build Ferox Android APK
     runs-on: ubuntu-latest
 
     steps:
@@ -32,9 +32,9 @@ jobs:
         working-directory: ./android
         run: gradle assembleDebug --stacktrace
 
-      - name: Upload Bravest APK Artifact
+      - name: Upload Ferox APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Bravest-Android-Browser-APK
+          name: Ferox-Android-Browser-APK
           path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 30

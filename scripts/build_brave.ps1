@@ -1,13 +1,13 @@
-# Bravest Browser - Native C++ Ninja Compilation Script
+# Ferox Browser - Native C++ Ninja Compilation Script
 # Compiles Brave from source with YouTube 3x/4x support
 
 param (
-    [string]$SourceDir = "C:\src\bravest",
+    [string]$SourceDir = "C:\src\ferox",
     [string]$Config = "Release"
 )
 
 Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host "  BRAVEST - Native C++ Binary Compiler    " -ForegroundColor Cyan
+Write-Host "  FEROX - Native C++ Binary Compiler    " -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 
 if (-not (Test-Path $SourceDir)) {
@@ -20,7 +20,7 @@ Set-Location $SourceDir
 Write-Host "[1/3] Generating GN build configuration for $Config..." -ForegroundColor Yellow
 npm run create_dist -- --target_os=win --target_arch=x64
 
-Write-Host "[2/3] Compiling Bravest browser with ninja..." -ForegroundColor Yellow
+Write-Host "[2/3] Compiling Ferox browser with ninja..." -ForegroundColor Yellow
 npm run build -- $Config
 
 Write-Host "[3/3] Packaging installer..." -ForegroundColor Yellow

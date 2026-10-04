@@ -1,55 +1,184 @@
 /**
- * Bravest Browser - YouTube Speed Turbo (3x / 4x) & Live Speed Indicator Engine
+ * Ferox Browser - YouTube Speed Turbo (3x / 4x) & Live Speed Indicator Engine
  */
 
 (function () {
   'use strict';
 
-  if (window.__bravest_engine_active) return;
-  window.__bravest_engine_active = true;
+  if (window.__ferox_engine_active) return;
+  window.__ferox_engine_active = true;
 
-  console.log('[Bravest] YouTube Speed & Indicator Engine Loaded');
+  console.log('[Ferox] YouTube Speed & Indicator Engine Loaded');
 
   const SPEED_LEVELS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25, 3.5, 3.75, 4.0];
   const POPULAR_SPEEDS = [1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0];
   const LINEAR_SPEEDS = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.5, 4.0];
-  let currentSpeed = parseFloat(localStorage.getItem('bravest_speed')) || 1.0;
+  // `bravest_speed` is the legacy key kept as a fallback so upgrading users
+  // keep their saved playback speed after the Ferox rebrand.
+  let currentSpeed =
+    parseFloat(localStorage.getItem('ferox_speed') || localStorage.getItem('bravest_speed')) || 1.0;
 
   // ==========================================
-  // 1. YouTube Ad Auto-Skipper
+  // 1. YouTube Ad Auto-Skipper + Anti-Adblock Shield
   // ==========================================
-  function killYouTubeAds() {
-    const adShowing = document.querySelector('.ad-showing, .ad-interrupting, .ytp-ad-player-overlay');
-    const videos = document.querySelectorAll('video');
+  let lastEnforcementAt = 0;
+  let adModeActive = false;
+  let adSkipTicker = null;
+  let adWasMuted = false;
+  let adWasPlaying = false;
 
-    if (adShowing) {
-      videos.forEach((v) => {
-        if (!isNaN(v.duration) && v.duration > 0) {
-          v.currentTime = v.duration + 1;
-        }
-        v.playbackRate = 16.0;
-        v.muted = true;
-      });
+  const AD_SKIP_SELECTORS = [
+    '.ytp-ad-skip-button',
+    '.ytp-ad-skip-button-modern',
+    '.ytp-skip-ad-button',
+    '.ytp-ad-skip-button-text',
+    '.videoAdUiSkipButton',
+    'button[id^="skip-button"]',
+    '.ytp-ad-overlay-close-button'
+  ];
+
+  function resumePlaybackIfPaused() {
+    if (!lastEnforcementAt || Date.now() - lastEnforcementAt > 5000) return;
+    const video = document.querySelector('video.html5-main-video') || document.querySelector('video');
+    if (video && video.paused) {
+      const attempt = video.play();
+      if (attempt && typeof attempt.catch === 'function') attempt.catch(() => {});
     }
+  }
 
-    const skipSelectors = [
-      '.ytp-ad-skip-button',
-      '.ytp-ad-skip-button-modern',
-      '.ytp-skip-ad-button',
-      '.ytp-ad-skip-button-text',
-      '.videoAdUiSkipButton',
-      'button[id^="skip-button"]'
-    ];
+  function isAdPlaying() {
+    if (document.querySelector('.ad-showing, .ad-interrupting')) return true;
+    const player = document.getElementById('movie_player');
+    if (player && (player.classList.contains('ad-showing') || player.classList.contains('ad-interrupting'))) {
+      return true;
+    }
+    // Some ad variants only expose the in-player overlay element.
+    return !!document.querySelector('.video-ads .ytp-ad-player-overlay, .video-ads .ytp-ad-player-overlay-layout');
+  }
 
-    skipSelectors.forEach((sel) => {
+  function clickAdSkipButtons() {
+    AD_SKIP_SELECTORS.forEach((sel) => {
       document.querySelectorAll(sel).forEach((btn) => {
-        if (btn && typeof btn.click === 'function') btn.click();
+        try {
+          if (btn && !btn.disabled) btn.click();
+        } catch (_) {}
       });
     });
+  }
+
+  function removeAdSurfaces() {
+    document
+      .querySelectorAll(
+        '.ytp-ad-overlay-container, .ytp-ad-player-overlay, .ytp-ad-image-overlay, .ytp-ad-text-overlay, ytd-ad-slot-renderer, ytd-banner-promo-renderer, #player-ads, #masthead-ad'
+      )
+      .forEach((el) => {
+        try {
+          el.remove();
+        } catch (_) {}
+      });
+  }
+
+  /**
+   * Hard ad termination. Instead of letting an ad play (even sped up), the
+   * media element is repeatedly seeked to its very end until YouTube tears the
+   * ad down and starts the real video. The ticker is required because the ad
+   * module clamps seeks back during the first moments of an ad.
+   */
+  function forceAdCompletion() {
+    document.querySelectorAll('video').forEach((v) => {
+      try {
+        v.playbackRate = 16.0; // fallback acceleration if a seek is rejected
+        v.muted = true;
+        if (Number.isFinite(v.duration) && v.duration > 0 && v.currentTime < v.duration - 0.05) {
+          v.currentTime = v.duration + 1; // clamps to duration and fires 'ended'
+        }
+      } catch (_) {}
+    });
+    clickAdSkipButtons();
+    removeAdSurfaces();
+  }
+
+  function enterAdMode() {
+    if (adModeActive) return;
+    adModeActive = true;
+    const video = document.querySelector('video.html5-main-video') || document.querySelector('video');
+    adWasMuted = video ? !!video.muted : false;
+    adWasPlaying = video ? !video.paused : true;
+    forceAdCompletion();
+    if (!adSkipTicker) adSkipTicker = setInterval(forceAdCompletion, 40);
+  }
+
+  function exitAdMode() {
+    if (!adModeActive) return;
+    adModeActive = false;
+    if (adSkipTicker) {
+      clearInterval(adSkipTicker);
+      adSkipTicker = null;
+    }
+    document.querySelectorAll('video').forEach((v) => {
+      try {
+        v.muted = adWasMuted;
+        v.playbackRate = currentSpeed;
+        v.defaultPlaybackRate = currentSpeed;
+        if ('preservesPitch' in v) v.preservesPitch = true;
+        if ('webkitPreservesPitch' in v) v.webkitPreservesPitch = true;
+      } catch (_) {}
+    });
+    if (adWasPlaying) {
+      const video = document.querySelector('video.html5-main-video') || document.querySelector('video');
+      if (video && video.paused) {
+        const attempt = video.play();
+        if (attempt && typeof attempt.catch === 'function') attempt.catch(() => {});
+      }
+    }
+    updateAllIndicators(currentSpeed);
+  }
+
+  function monitorYouTubeAds() {
+    if (isAdPlaying()) {
+      if (!adModeActive) enterAdMode();
+      else forceAdCompletion();
+    } else if (adModeActive) {
+      exitAdMode();
+    }
+  }
+
+  function killYouTubeAds() {
+    monitorYouTubeAds();
 
     document.querySelectorAll('.ytp-ad-overlay-container, ytd-ad-slot-renderer, ytd-banner-promo-renderer, #player-ads, #masthead-ad').forEach((el) => {
       el.remove();
     });
+
+    // Tear down YouTube's "Ad blockers violate YouTube's Terms of Service"
+    // enforcement pop-up and un-pause the player it froze.
+    document.querySelectorAll('ytd-enforcement-message-view-model').forEach((el) => {
+      const dialog = el.closest('tp-yt-paper-dialog') || el;
+      dialog.remove();
+      document.querySelectorAll('tp-yt-iron-overlay-backdrop').forEach((backdrop) => backdrop.remove());
+      try {
+        document.documentElement.style.overflow = '';
+        if (document.body) document.body.style.overflow = '';
+      } catch (_) {}
+      lastEnforcementAt = Date.now();
+    });
+
+    document.querySelectorAll('ytd-enforcement-message-view-model button').forEach((btn) => {
+      const label = ((btn.textContent || '') + ' ' + (btn.getAttribute('aria-label') || '')).toLowerCase();
+      if (label.includes('dismiss') || label.includes('understand')) {
+        try {
+          btn.click();
+        } catch (_) {}
+      }
+    });
+
+    document.querySelectorAll('tp-yt-paper-toast').forEach((toast) => {
+      if (/experiencing interruptions|ad ?blocks?|blocker/i.test(toast.textContent || '')) {
+        toast.remove();
+      }
+    });
+
+    resumePlaybackIfPaused();
   }
 
   // ==========================================
@@ -58,7 +187,7 @@
   function applySpeed(rate, showToast = true) {
     rate = Math.round(Math.min(Math.max(rate, 0.25), 4.0) * 100) / 100;
     currentSpeed = rate;
-    localStorage.setItem('bravest_speed', rate.toString());
+    localStorage.setItem('ferox_speed', rate.toString());
 
     const videos = document.querySelectorAll('video');
     videos.forEach((video) => {
@@ -80,10 +209,10 @@
   // ==========================================
   let toastTimer = null;
   function showBigCenterSpeedToast(rate) {
-    let toast = document.getElementById('bravest-center-toast');
+    let toast = document.getElementById('ferox-center-toast');
     if (!toast) {
       toast = document.createElement('div');
-      toast.id = 'bravest-center-toast';
+      toast.id = 'ferox-center-toast';
       toast.style.cssText = `
         position: fixed;
         top: 15%;
@@ -109,7 +238,16 @@
       document.body.appendChild(toast);
     }
 
-    toast.innerHTML = `<span style="font-size:36px;">🚀</span> <span>${rate.toFixed(2).replace(/\.00$/, '')}x SPEED</span>`;
+    // Trusted Types safe: build nodes instead of assigning innerHTML.
+    while (toast.firstChild) toast.removeChild(toast.firstChild);
+    const toastIcon = document.createElement('span');
+    toastIcon.style.fontSize = '36px';
+    toastIcon.textContent = '🚀';
+    const toastLabel = document.createElement('span');
+    toastLabel.textContent = `${rate.toFixed(2).replace(/\.00$/, '')}x SPEED`;
+    toast.appendChild(toastIcon);
+    toast.appendChild(document.createTextNode(' '));
+    toast.appendChild(toastLabel);
     toast.style.opacity = '1';
     toast.style.transform = 'translate(-50%, -50%) scale(1)';
 
@@ -129,10 +267,10 @@
     const player = document.querySelector('#movie_player, .html5-video-player');
     if (!player) return;
 
-    let pill = document.getElementById('bravest-persistent-pill');
+    let pill = document.getElementById('ferox-persistent-pill');
     if (!pill) {
       pill = document.createElement('div');
-      pill.id = 'bravest-persistent-pill';
+      pill.id = 'ferox-persistent-pill';
       pill.style.cssText = `
         position: absolute;
         top: 14px;
@@ -151,11 +289,20 @@
         transition: all 0.2s ease;
       `;
 
-      pill.innerHTML = `
-        <span style="font-size:13px; margin-right:5px;">⚡</span>
-        <span id="bravest-pill-text" style="color:#ffffff; font-weight:800; font-size:13px; font-family:'Segoe UI', sans-serif;">1.0x</span>
-        <span style="color:#ff7733; font-size:10px; margin-left:6px; font-weight:600;">▼</span>
-      `;
+      // Trusted Types safe: build nodes instead of assigning innerHTML.
+      const pillIcon = document.createElement('span');
+      pillIcon.style.cssText = 'font-size:13px; margin-right:5px;';
+      pillIcon.textContent = '⚡';
+      const pillText = document.createElement('span');
+      pillText.id = 'ferox-pill-text';
+      pillText.style.cssText = "color:#ffffff; font-weight:800; font-size:13px; font-family:'Segoe UI', sans-serif;";
+      pillText.textContent = '1.0x';
+      const pillArrow = document.createElement('span');
+      pillArrow.style.cssText = 'color:#ff7733; font-size:10px; margin-left:6px; font-weight:600;';
+      pillArrow.textContent = '▼';
+      pill.appendChild(pillIcon);
+      pill.appendChild(pillText);
+      pill.appendChild(pillArrow);
 
       // Quick dropdown menu on click
       pill.addEventListener('click', (e) => {
@@ -167,7 +314,7 @@
     }
 
     // Remove obsolete top-right bar if present
-    const oldQuickBar = document.getElementById('bravest-quick-bar');
+    const oldQuickBar = document.getElementById('ferox-quick-bar');
     if (oldQuickBar) oldQuickBar.remove();
   }
 
@@ -177,32 +324,42 @@
   function injectLinearSpeedBar() {
     const video = document.querySelector('video');
     if (!video) {
-      const existingBar = document.getElementById('bravest-linear-speed-bar');
+      const existingBar = document.getElementById('ferox-linear-speed-bar');
       if (existingBar) existingBar.remove();
       return;
     }
 
     // Clean up obsolete top-right bar if present
-    const oldQuickBar = document.getElementById('bravest-quick-bar');
+    const oldQuickBar = document.getElementById('ferox-quick-bar');
     if (oldQuickBar) oldQuickBar.remove();
 
     const moviePlayer = document.querySelector('#movie_player, .html5-video-player');
     const isFullscreen = !!(document.fullscreenElement || (moviePlayer && moviePlayer.classList.contains('ytp-fullscreen')));
 
-    let bar = document.getElementById('bravest-linear-speed-bar');
+    let bar = document.getElementById('ferox-linear-speed-bar');
     if (!bar) {
       bar = document.createElement('div');
-      bar.id = 'bravest-linear-speed-bar';
+      bar.id = 'ferox-linear-speed-bar';
 
       const label = document.createElement('div');
-      label.className = 'bravest-speed-bar-label';
-      label.innerHTML = `<span style="font-size:12px; color:#ff5500;">⚡</span> <span style="font-size:11px; font-weight:800; color:#ff6600; font-family:'Segoe UI', sans-serif; letter-spacing:0.5px;">SPEED:</span>`;
+      label.className = 'ferox-speed-bar-label';
       label.style.cssText = 'display:flex; align-items:center; gap:3px; margin-right:4px; user-select:none;';
+      // Trusted Types safe: build nodes instead of assigning innerHTML.
+      const labelIcon = document.createElement('span');
+      labelIcon.style.cssText = 'font-size:12px; color:#ff5500;';
+      labelIcon.textContent = '⚡';
+      const labelText = document.createElement('span');
+      labelText.style.cssText =
+        "font-size:11px; font-weight:800; color:#ff6600; font-family:'Segoe UI', sans-serif; letter-spacing:0.5px;";
+      labelText.textContent = 'SPEED:';
+      label.appendChild(labelIcon);
+      label.appendChild(document.createTextNode(' '));
+      label.appendChild(labelText);
       bar.appendChild(label);
 
       LINEAR_SPEEDS.forEach((spd) => {
         const btn = document.createElement('button');
-        btn.className = 'bravest-speed-select-btn';
+        btn.className = 'ferox-speed-select-btn';
         btn.dataset.speed = spd.toString();
         btn.textContent = `${spd}x`;
         btn.title = `Switch to ${spd}x speed (Single Tap)`;
@@ -322,14 +479,14 @@
 
   // Speed dropdown popup attached to the pill
   function toggleSpeedDropdown(pill) {
-    let dropdown = document.getElementById('bravest-speed-dropdown');
+    let dropdown = document.getElementById('ferox-speed-dropdown');
     if (dropdown) {
       dropdown.remove();
       return;
     }
 
     dropdown = document.createElement('div');
-    dropdown.id = 'bravest-speed-dropdown';
+    dropdown.id = 'ferox-speed-dropdown';
     dropdown.style.cssText = `
       position: absolute;
       top: 48px;
@@ -391,12 +548,12 @@
     const rightControls = document.querySelector('.ytp-right-controls');
     if (!rightControls) return;
 
-    let bottomBadge = document.getElementById('bravest-bottom-speed-badge');
+    let bottomBadge = document.getElementById('ferox-bottom-speed-badge');
     if (!bottomBadge) {
       bottomBadge = document.createElement('button');
-      bottomBadge.id = 'bravest-bottom-speed-badge';
+      bottomBadge.id = 'ferox-bottom-speed-badge';
       bottomBadge.className = 'ytp-button';
-      bottomBadge.title = 'Bravest Speed Controller (Click to select)';
+      bottomBadge.title = 'Ferox Speed Controller (Click to select)';
       bottomBadge.style.cssText = `
         display: inline-flex;
         align-items: center;
@@ -412,7 +569,7 @@
 
       bottomBadge.addEventListener('click', (e) => {
         e.stopPropagation();
-        const pill = document.getElementById('bravest-persistent-pill');
+        const pill = document.getElementById('ferox-persistent-pill');
         if (pill) toggleSpeedDropdown(pill);
       });
 
@@ -446,19 +603,24 @@
     const rateText = `${rate.toFixed(2).replace(/\.00$/, '')}x`;
 
     // 1. Update Top-Left Pill
-    const pillText = document.getElementById('bravest-pill-text');
+    const pillText = document.getElementById('ferox-pill-text');
     if (pillText) {
       pillText.textContent = rateText;
     }
 
-    // 2. Update Bottom-Right Control Badge
-    const bottomBadge = document.getElementById('bravest-bottom-speed-badge');
+    // 2. Update Bottom-Right Control Badge (Trusted Types safe)
+    const bottomBadge = document.getElementById('ferox-bottom-speed-badge');
     if (bottomBadge) {
-      bottomBadge.innerHTML = `<span style="color:#ff5500; font-size:11px; margin-right:2px;">⚡</span>${rateText}`;
+      while (bottomBadge.firstChild) bottomBadge.removeChild(bottomBadge.firstChild);
+      const badgeIcon = document.createElement('span');
+      badgeIcon.style.cssText = 'color:#ff5500; font-size:11px; margin-right:2px;';
+      badgeIcon.textContent = '⚡';
+      bottomBadge.appendChild(badgeIcon);
+      bottomBadge.appendChild(document.createTextNode(rateText));
     }
 
     // 3. Update Linear Speed Buttons
-    document.querySelectorAll('.bravest-speed-select-btn').forEach((btn) => {
+    document.querySelectorAll('.ferox-speed-select-btn').forEach((btn) => {
       const sp = parseFloat(btn.dataset.speed);
       if (Math.abs(sp - rate) < 0.05) {
         btn.style.background = '#ff5500';
@@ -483,7 +645,7 @@
       (e) => {
         if (e.target && e.target.tagName === 'VIDEO') {
           const v = e.target;
-          const targetSpeed = parseFloat(localStorage.getItem('bravest_speed')) || currentSpeed;
+          const targetSpeed = parseFloat(localStorage.getItem('ferox_speed')) || currentSpeed;
           if (targetSpeed && !document.querySelector('.ad-showing')) {
             try {
               v.playbackRate = targetSpeed;
@@ -564,17 +726,17 @@
 
   function updateMouseSpeedHud(rate) {
     if (!mouseSpeedActive) return;
-    const hud = document.getElementById('bravest-mouse-speed-hud');
+    const hud = document.getElementById('ferox-mouse-speed-hud');
     if (!hud) return;
-    const valueEl = hud.querySelector('.bravest-mouse-value');
+    const valueEl = hud.querySelector('.ferox-mouse-value');
     if (valueEl) valueEl.textContent = formatSpeedText(rate);
   }
 
   function showMouseSpeedHud() {
-    let hud = document.getElementById('bravest-mouse-speed-hud');
+    let hud = document.getElementById('ferox-mouse-speed-hud');
     if (!hud) {
       hud = document.createElement('div');
-      hud.id = 'bravest-mouse-speed-hud';
+      hud.id = 'ferox-mouse-speed-hud';
       hud.style.cssText = `
         position: fixed;
         top: 14px;
@@ -596,12 +758,24 @@
         opacity: 0;
         transition: opacity 0.18s ease;
       `;
-      hud.innerHTML = `
-        <span style="font-size:15px;">&#128433;&#65039;</span>
-        <span style="color:#ffffff; font-weight:800; font-size:15px;">Mouse Speed</span>
-        <span class="bravest-mouse-value" style="color:#ff7733; font-weight:800; font-size:16px; min-width:54px; text-align:center;">1x</span>
-        <span style="color:#8a8aa0; font-size:10.5px; font-weight:600;">move &#8596; &nbsp;|&nbsp; CTRL = normal &nbsp;|&nbsp; wheel-click = off</span>
-      `;
+      // Trusted Types safe: build nodes instead of assigning innerHTML.
+      const hudIcon = document.createElement('span');
+      hudIcon.style.fontSize = '15px';
+      hudIcon.textContent = '🖱️';
+      const hudTitle = document.createElement('span');
+      hudTitle.style.cssText = 'color:#ffffff; font-weight:800; font-size:15px;';
+      hudTitle.textContent = 'Mouse Speed';
+      const hudValue = document.createElement('span');
+      hudValue.className = 'ferox-mouse-value';
+      hudValue.style.cssText = 'color:#ff7733; font-weight:800; font-size:16px; min-width:54px; text-align:center;';
+      hudValue.textContent = '1x';
+      const hudHint = document.createElement('span');
+      hudHint.style.cssText = 'color:#8a8aa0; font-size:10.5px; font-weight:600;';
+      hudHint.textContent = 'move ↔  |  CTRL = normal  |  wheel-click = off';
+      hud.appendChild(hudIcon);
+      hud.appendChild(hudTitle);
+      hud.appendChild(hudValue);
+      hud.appendChild(hudHint);
       document.body.appendChild(hud);
     }
     hud.style.display = 'flex';
@@ -611,13 +785,13 @@
   }
 
   function hideMouseSpeedHud() {
-    const hud = document.getElementById('bravest-mouse-speed-hud');
+    const hud = document.getElementById('ferox-mouse-speed-hud');
     if (hud) hud.style.opacity = '0';
   }
 
   function setMouseSpeedActive(active) {
     mouseSpeedActive = active;
-    window.__bravest_mouse_speed_active = active;
+    window.__ferox_mouse_speed_active = active;
     lastMouseX = null;
     if (active) {
       const video = getActiveVideo();
@@ -730,7 +904,7 @@
   // ==========================================
   setInterval(() => {
     // Adopt speeds set from the browser toolbar / other sources
-    const storedSpeed = parseFloat(localStorage.getItem('bravest_speed'));
+    const storedSpeed = parseFloat(localStorage.getItem('ferox_speed'));
     if (!isNaN(storedSpeed) && Math.abs(storedSpeed - currentSpeed) > 0.001) {
       currentSpeed = storedSpeed;
       mouseRawSpeed = storedSpeed;
@@ -761,6 +935,10 @@
     updateAllIndicators(activeRate);
     updateMouseSpeedHud(activeRate);
   }, 400);
+
+  // Fast dedicated ad watcher: detects ads and hard-ends them almost
+  // immediately (~50ms) instead of letting them play out at high speed.
+  setInterval(monitorYouTubeAds, 50);
 
   // Initial load
   setTimeout(() => {

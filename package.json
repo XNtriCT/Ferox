@@ -1,7 +1,7 @@
 {
-  "name": "bravest-browser",
+  "name": "ferox-browser",
   "version": "1.2.0",
-  "description": "Bravest - Brave Browser fork with continuous 1x-4x mouse speed control, single-tap video speed toolbar, and Brave Shields ad-blocking",
+  "description": "Ferox - Brave Browser fork with continuous 1x-4x mouse speed control, single-tap video speed toolbar, and Brave Shields ad-blocking",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -15,7 +15,7 @@
     "youtube",
     "playback-speed"
   ],
-  "author": "Bravest Project",
+  "author": "Ferox Project",
   "license": "MPL-2.0",
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.18.2",
@@ -26,8 +26,8 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "com.bravest.browser",
-    "productName": "Bravest",
+    "appId": "com.ferox.browser",
+    "productName": "Ferox",
     "directories": {
       "output": "dist"
     },
@@ -57,12 +57,12 @@
       ]
     },
     "portable": {
-      "artifactName": "Bravest.exe"
+      "artifactName": "Ferox.exe"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "Bravest-Setup.exe"
+      "artifactName": "Ferox-Setup.exe"
     }
   }
 }

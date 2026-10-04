@@ -1,12 +1,12 @@
-# 🦡 Bravest Browser
+# 🦡 Ferox Browser
 
 <p align="center">
-  <img src="assets/logo.png" alt="Bravest Browser logo" width="180">
+  <img src="assets/logo.png" alt="Ferox Browser logo" width="180">
 </p>
 
 > A privacy-first **Brave Browser fork** with the full **Brave Shields** ad-blocking engine, a dedicated **single-tap 1x–4x playback speed toolbar**, brand-new **continuous mouse speed control** (lock on with a wheel-click and tune the speed by moving the mouse), and a matching **Android app** with a drag-and-hold speed bubble.
 
-![Bravest Browser](https://img.shields.io/badge/Bravest-Brave%20Fork-ff5500?style=for-the-badge&logo=brave)
+![Ferox Browser](https://img.shields.io/badge/Ferox-Brave%20Fork-ff5500?style=for-the-badge&logo=brave)
 ![Version](https://img.shields.io/badge/Version-v1.2.0-orange?style=for-the-badge)
 ![Ad Blocker](https://img.shields.io/badge/Brave%20Shields-Active-2ed573?style=for-the-badge)
 ![YouTube Speeds](https://img.shields.io/badge/Video%20Speeds-1x%20to%204x-ff7700?style=for-the-badge)
@@ -16,9 +16,9 @@
 
 ### 🔗 Downloads & Releases
 
-* **💻 Windows Portable Executable**: [`Bravest.exe`](Bravest.exe) — also available as [`Bravest.lnk`](Bravest.lnk) shortcut
-* **📱 Android APK (v1.2.0)**: [Download Bravest-Android-v1.2.0.apk](https://github.com/XNtriCT/Bravest/releases/download/v1.2.0/Bravest-Android-v1.2.0.apk)
-* **🐙 GitHub Repository**: [https://github.com/XNtriCT/Bravest](https://github.com/XNtriCT/Bravest)
+* **💻 Windows Portable Executable**: [`Ferox.exe`](Ferox.exe) — also available as [`Ferox.lnk`](Ferox.lnk) shortcut
+* **📱 Android APK (v1.2.0)**: [Download Ferox-Android-v1.2.0.apk](https://github.com/XNtriCT/Ferox/releases/download/v1.2.0/Ferox-Android-v1.2.0.apk)
+* **🐙 GitHub Repository**: [https://github.com/XNtriCT/Ferox](https://github.com/XNtriCT/Ferox)
 
 ---
 
@@ -53,7 +53,7 @@ The 1x–4x speed bar sits directly below the URL bar. The active speed glows in
   - Extended keyboard shortcuts (`Shift + >` and `Shift + <`) scale smoothly up to **4x**.
   - Smooth audio pitch preservation (`preservesPitch = true`) keeping voices clear and natural.
   - Speed memory: remembers your preferred playback speed across sessions.
-- **📱 Bravest for Android (v1.2.0)**:
+- **📱 Ferox for Android (v1.2.0)**:
   - Compact **speed selection bar on top**, directly below the URL space, matching the desktop web app.
   - Prominent **drag-and-hold speed bubble** (pulsing globule animation) docked between the *next* and *Brave Search* buttons.
   - Tap and hold the bubble, drag your finger anywhere on screen: **right = faster, left = slower**, fully continuous **1x → 4x**.
@@ -92,7 +92,7 @@ The Android build ships the same speed engine with a touch-first control:
 | **Speed pill (top bar)** | Steps up to the next preset, wraps at 4x |
 | **Drag-and-hold bubble** | Hold the pulsing bubble and drag: right = faster, left = slower (continuous 1x–4x). Release to deactivate. |
 
-Install the latest APK from the [releases page](https://github.com/XNtriCT/Bravest/releases/latest).
+Install the latest APK from the [releases page](https://github.com/XNtriCT/Ferox/releases/latest).
 
 ---
 
@@ -110,7 +110,7 @@ Install the latest APK from the [releases page](https://github.com/XNtriCT/Brave
 
 ---
 
-## 🚀 Quick Start (Running Bravest Locally)
+## 🚀 Quick Start (Running Ferox Locally)
 
 ### Prerequisites
 - Node.js (v18 or newer)

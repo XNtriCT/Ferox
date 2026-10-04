@@ -41,7 +41,7 @@
                     android:layout_width="22dp"
                     android:layout_height="22dp"
                     android:src="@drawable/app_logo"
-                    android:contentDescription="Bravest" />
+                    android:contentDescription="Ferox" />
 
                 <TextView
                     android:id="@+id/textShieldsCount"

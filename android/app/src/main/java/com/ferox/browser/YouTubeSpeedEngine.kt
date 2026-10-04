@@ -1,4 +1,4 @@
-package com.bravest.browser
+package com.ferox.browser
 
 import android.webkit.WebView
 
@@ -6,12 +6,12 @@ object YouTubeSpeedEngine {
 
     val SPEED_INJECTION_JS = """
         (function() {
-            if (window.__bravest_mobile_active) return;
-            window.__bravest_mobile_active = true;
+            if (window.__ferox_mobile_active) return;
+            window.__ferox_mobile_active = true;
 
-            console.log('[Bravest Android] YouTube speed, ad-skip & background playback engine loaded');
+            console.log('[Ferox Android] YouTube speed, ad-skip & background playback engine loaded');
 
-            let preferredSpeed = parseFloat(localStorage.getItem('bravest_speed')) || 1.0;
+            let preferredSpeed = parseFloat(localStorage.getItem('ferox_speed') || localStorage.getItem('bravest_speed')) || 1.0;
 
             // 1. Background Playback Override (Brave feature)
             Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: false });
@@ -19,10 +19,10 @@ object YouTubeSpeedEngine {
             document.addEventListener('visibilitychange', function(e) { e.stopImmediatePropagation(); }, true);
 
             // 2. Speed setter used by the native Android controls (pills + bubble)
-            window.bravestSetSpeed = function(rate) {
+            window.feroxSetSpeed = function(rate) {
                 rate = Math.round(Math.min(Math.max(rate, 0.25), 4.0) * 100) / 100;
                 preferredSpeed = rate;
-                localStorage.setItem('bravest_speed', rate.toString());
+                localStorage.setItem('ferox_speed', rate.toString());
 
                 document.querySelectorAll('video').forEach(function(v) {
                     try {
@@ -34,7 +34,7 @@ object YouTubeSpeedEngine {
                 });
             };
 
-            window.bravestGetSpeed = function() {
+            window.feroxGetSpeed = function() {
                 return preferredSpeed;
             };
 
@@ -56,7 +56,7 @@ object YouTubeSpeedEngine {
             setInterval(function() {
                 autoSkipAds();
 
-                var stored = parseFloat(localStorage.getItem('bravest_speed'));
+                var stored = parseFloat(localStorage.getItem('ferox_speed'));
                 if (!isNaN(stored) && Math.abs(stored - preferredSpeed) > 0.001) {
                     preferredSpeed = stored;
                 }
@@ -76,7 +76,7 @@ object YouTubeSpeedEngine {
 
             // Initial apply
             setTimeout(function() {
-                window.bravestSetSpeed(preferredSpeed);
+                window.feroxSetSpeed(preferredSpeed);
             }, 600);
         })();
     """.trimIndent()

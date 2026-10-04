@@ -1,5 +1,5 @@
 /**
- * Bravest Browser - Main Process
+ * Ferox Browser - Main Process
  * Chromium runtime, Brave Shields integration, IPC routing, and YouTube 3x/4x engine
  */
 
@@ -14,6 +14,11 @@ const shieldsEngine = new BraveShieldsEngine();
 // Read YouTube turbo script once into memory for ultra-fast injection
 const ytTurboScript = fs.readFileSync(path.join(__dirname, 'engine', 'youtube', 'youtube_speed.js'), 'utf8');
 
+// Shields preload runs at document-start inside every webview (cosmetic
+// filtering + YouTube anti-adblock defenses). Registered below through
+// `will-attach-webview`, which Electron supports since v1.
+const shieldsPreloadPath = path.join(__dirname, 'engine', 'shields', 'page_preload.js');
+
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -24,7 +29,7 @@ async function createWindow() {
     resizable: true,
     maximizable: true,
     minimizable: true,
-    title: 'Bravest',
+    title: 'Ferox',
     backgroundColor: '#121217',
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
@@ -36,7 +41,7 @@ async function createWindow() {
     }
   });
 
-  // Load the Bravest UI
+  // Load the Ferox UI
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
   // Sync window maximize/unmaximize states to renderer
@@ -70,13 +75,21 @@ app.whenReady().then(async () => {
 
   // Set modern user agent
   session.defaultSession.setUserAgent(
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Bravest/1.0'
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Ferox/1.0'
   );
 
   // Handle all webviews and webContents
   app.on('web-contents-created', (event, contents) => {
     // Attach cosmetic ad blocking
     shieldsEngine.attachToWebContents(contents);
+
+    // Inject the Ferox Shields preload into every <webview>. This runs at
+    // document-start, so cosmetic filters and the YouTube ad shields win the
+    // race against page scripts and anti-adblock detection.
+    contents.on('will-attach-webview', (event, webPreferences) => {
+      delete webPreferences.preloadURL;
+      webPreferences.preload = shieldsPreloadPath;
+    });
 
     // Route pop-ups (middle-click / target=_blank / window.open) into a new
     // in-window tab instead of spawning a separate Electron window.

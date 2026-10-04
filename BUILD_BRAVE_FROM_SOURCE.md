@@ -1,4 +1,4 @@
-# Building Brave (Bravest) from Source (C++ / Chromium)
+# Building Brave (Ferox) from Source (C++ / Chromium)
 
 This document describes how to clone and compile the full C++ Brave Browser source code (`brave-core`) with the 3x/4x YouTube speed modifications.
 
@@ -24,8 +24,8 @@ Add `C:\src\depot_tools` to the front of your system `PATH`.
 
 ### Step 2: Clone `brave-browser`
 ```bash
-git clone https://github.com/brave/brave-browser.git C:\src\bravest
-cd C:\src\bravest
+git clone https://github.com/brave/brave-browser.git C:\src\ferox
+cd C:\src\ferox
 ```
 
 ### Step 3: Initialize and Sync Chromium & `brave-core`
@@ -35,15 +35,15 @@ npm run init
 ```
 *Note: This step downloads the Chromium source tree (~35 GB download, ~80 GB uncompressed) and sets up `src/brave`.*
 
-### Step 4: Apply the Bravest 3x/4x YouTube Patch
+### Step 4: Apply the Ferox 3x/4x YouTube Patch
 Navigate to `src/brave` and apply the patch:
 ```bash
 cd src/brave
-git apply C:\Users\merin\Documents\My Automations\Random Ideas\Bravest\patches\brave_core_youtube_speeds.patch
+git apply C:\Users\merin\Documents\My Automations\Random Ideas\Ferox\patches\brave_core_youtube_speeds.patch
 ```
 
-### Step 5: Compile Bravest
-From the root `C:\src\bravest` directory:
+### Step 5: Compile Ferox
+From the root `C:\src\ferox` directory:
 ```bash
 # Generate GN build configuration for Release x64
 npm run create_dist -- --target_os=win --target_arch=x64
@@ -55,7 +55,7 @@ npm run build -- Release
 ### Step 6: Locate the Compiled Binary
 After compilation completes, the native executable will be located at:
 ```
-C:\src\bravest\src\out\Release\brave.exe
+C:\src\ferox\src\out\Release\brave.exe
 ```
 
 ---
@@ -63,5 +63,5 @@ C:\src\bravest\src\out\Release\brave.exe
 ## 3. Automated Scripts
 
 You can also execute the automated PowerShell scripts in this repo:
-- [`scripts/fork_and_setup.ps1`](file:///c:/Users/merin/Documents/My%20Automations/Random%20Ideas/Bravest/scripts/fork_and_setup.ps1)
-- [`scripts/build_brave.ps1`](file:///c:/Users/merin/Documents/My%20Automations/Random%20Ideas/Bravest/scripts/build_brave.ps1)
+- [`scripts/fork_and_setup.ps1`](file:///c:/Users/merin/Documents/My%20Automations/Random%20Ideas/Ferox/scripts/fork_and_setup.ps1)
+- [`scripts/build_brave.ps1`](file:///c:/Users/merin/Documents/My%20Automations/Random%20Ideas/Ferox/scripts/build_brave.ps1)

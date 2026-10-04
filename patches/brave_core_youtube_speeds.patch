@@ -1,5 +1,5 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Bravest Team <bravest@bravest-browser.org>
+From: Ferox Team <ferox@ferox-browser.org>
 Date: Wed, 26 Aug 2026 00:00:00 +0000
 Subject: [PATCH] brave-core: add native 3x and 4x YouTube playback speeds and
  Greaselion auto-injection
@@ -17,10 +17,10 @@ index a1b2c3d4..e5f6a7b8 100644
    // Register default site scripts
    RegisterDefaultScriptlets();
  
-+  // Bravest Enhancement: Register native YouTube 3x and 4x speed engine
++  // Ferox Enhancement: Register native YouTube 3x and 4x speed engine
 +  std::string yt_speed_script = R"(
 +    (function() {
-+      window.__bravest_speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4];
++      window.__ferox_speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4];
 +      window.addEventListener('keydown', (e) => {
 +        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
 +        const v = document.querySelector('video');

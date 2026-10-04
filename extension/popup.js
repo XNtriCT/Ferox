@@ -2,7 +2,7 @@ document.querySelectorAll('.btn').forEach((btn) => {
   btn.addEventListener('click', async () => {
     const speed = parseFloat(btn.dataset.speed);
     if (chrome && chrome.storage && chrome.storage.local) {
-      await chrome.storage.local.set({ bravest_speed: speed });
+      await chrome.storage.local.set({ ferox_speed: speed });
     }
 
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

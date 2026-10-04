@@ -1,5 +1,5 @@
 /**
- * Bravest Browser - Webview Preload Script
+ * Ferox Browser - Webview Preload Script
  * Injects YouTube 3x/4x speed controls and anti-ad scriptlets on web pages
  */
 
@@ -18,9 +18,9 @@ window.addEventListener('DOMContentLoaded', () => {
       script.type = 'text/javascript';
       script.textContent = scriptCode;
       (document.head || document.documentElement).appendChild(script);
-      console.log('[Bravest Webview] Injected YouTube speed engine into YouTube page.');
+      console.log('[Ferox Webview] Injected YouTube speed engine into YouTube page.');
     } catch (e) {
-      console.error('[Bravest Webview] Failed to read/inject youtube_speed.js:', e);
+      console.error('[Ferox Webview] Failed to read/inject youtube_speed.js:', e);
     }
   }
 });

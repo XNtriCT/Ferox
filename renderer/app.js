@@ -1,5 +1,5 @@
 /**
- * Bravest Browser - Renderer UI Controller
+ * Ferox Browser - Renderer UI Controller
  * Tab management, Omnibox, Shields Controller, and Webview orchestration.
  */
 
@@ -29,22 +29,22 @@ document.addEventListener('DOMContentLoaded', () => {
   const ytSpeedBadge = document.getElementById('yt-speed-badge');
 
   // Window Controls
-  if (minBtn) minBtn.addEventListener('click', () => window.bravestAPI?.minimize());
-  if (maxBtn) maxBtn.addEventListener('click', () => window.bravestAPI?.maximize());
-  if (closeBtn) closeBtn.addEventListener('click', () => window.bravestAPI?.close());
+  if (minBtn) minBtn.addEventListener('click', () => window.feroxAPI?.minimize());
+  if (maxBtn) maxBtn.addEventListener('click', () => window.feroxAPI?.maximize());
+  if (closeBtn) closeBtn.addEventListener('click', () => window.feroxAPI?.close());
 
   // Double-click titlebar to maximize / unmaximize
   const titlebar = document.getElementById('titlebar');
   if (titlebar) {
     titlebar.addEventListener('dblclick', (e) => {
       if (e.target.closest('#window-controls, .browser-tab, #new-tab-btn, button, input')) return;
-      window.bravestAPI?.maximize();
+      window.feroxAPI?.maximize();
     });
   }
 
   // Sync Maximize / Restore button state with OS
-  if (window.bravestAPI?.onWindowMaximized) {
-    window.bravestAPI.onWindowMaximized((isMaximized) => {
+  if (window.feroxAPI?.onWindowMaximized) {
+    window.feroxAPI.onWindowMaximized((isMaximized) => {
       document.body.classList.toggle('window-maximized', isMaximized);
       if (maxBtn) {
         if (isMaximized) {
@@ -269,7 +269,7 @@ document.addEventListener('DOMContentLoaded', () => {
           rate = playing ? playing.playbackRate
                : (mainVideo ? mainVideo.playbackRate : (all[0] ? all[0].playbackRate : 1));
         }
-        return { rate: rate, mouseActive: !!window.__bravest_mouse_speed_active };
+        return { rate: rate, mouseActive: !!window.__ferox_mouse_speed_active };
       })()
     `)
       .then((res) => {
@@ -285,7 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ytSpeedBadge.classList.toggle('mouse-active', !!mouseActive);
             ytSpeedBadge.title = mouseActive
               ? 'Mouse Speed Control active - move mouse left/right (hold CTRL for normal mouse, wheel-click to exit)'
-              : 'Bravest Speed Turbo Active';
+              : 'Ferox Speed Turbo Active';
           }
           updateSpeedButtonsUI(rate);
         }
@@ -312,7 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if ('webkitPreservesPitch' in v) v.webkitPreservesPitch = true;
           } catch (_) {}
         });
-        localStorage.setItem('bravest_speed', rate.toString());
+        localStorage.setItem('ferox_speed', rate.toString());
         return rate;
       })()
     `).then((rate) => {
@@ -387,7 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
               if ('webkitPreservesPitch' in v) v.webkitPreservesPitch = true;
             } catch (_) {}
           });
-          localStorage.setItem('bravest_speed', next.toString());
+          localStorage.setItem('ferox_speed', next.toString());
           return next;
         })()
       `).then((rate) => {
@@ -482,13 +482,13 @@ document.addEventListener('DOMContentLoaded', () => {
   if (shieldsToggleInput) {
     shieldsToggleInput.addEventListener('change', () => {
       const enabled = shieldsToggleInput.checked;
-      window.bravestAPI?.toggleShields(enabled);
+      window.feroxAPI?.toggleShields(enabled);
     });
   }
 
   // Shields live stats updates from main process
-  if (window.bravestAPI?.onShieldsUpdate) {
-    window.bravestAPI.onShieldsUpdate((data) => {
+  if (window.feroxAPI?.onShieldsUpdate) {
+    window.feroxAPI.onShieldsUpdate((data) => {
       if (shieldsBlockedCount) shieldsBlockedCount.textContent = data.total || 0;
       if (shieldStatAds) shieldStatAds.textContent = data.total || 0;
     });
@@ -496,8 +496,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Pop-ups requested by web pages (middle-click / target=_blank / window.open)
   // open as a new tab in this same window instead of a separate window.
-  if (window.bravestAPI?.onOpenInNewTab) {
-    window.bravestAPI.onOpenInNewTab((data) => {
+  if (window.feroxAPI?.onOpenInNewTab) {
+    window.feroxAPI.onOpenInNewTab((data) => {
       if (data && data.url) {
         const openInBackground = data.disposition === 'background-tab';
         createTab(data.url, !openInBackground);

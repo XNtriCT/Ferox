@@ -1,4 +1,4 @@
-package com.bravest.browser
+package com.ferox.browser
 
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
@@ -343,7 +343,7 @@ class MainActivity : AppCompatActivity() {
         lastJsPushTime = now
 
         val value = String.format(Locale.US, "%.2f", speed)
-        webView.evaluateJavascript("if (window.bravestSetSpeed) window.bravestSetSpeed($value);", null)
+        webView.evaluateJavascript("if (window.feroxSetSpeed) window.feroxSetSpeed($value);", null)
     }
 
     private fun formatSpeed(speed: Float): String {
@@ -368,7 +368,7 @@ class MainActivity : AppCompatActivity() {
         settings.setSupportZoom(true)
         settings.builtInZoomControls = true
         settings.displayZoomControls = false
-        settings.userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36 Bravest/1.0"
+        settings.userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36 Ferox/1.0"
 
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)

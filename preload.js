@@ -1,10 +1,10 @@
 /**
- * Bravest Browser - Main Window Preload Script
+ * Ferox Browser - Main Window Preload Script
  */
 
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('bravestAPI', {
+contextBridge.exposeInMainWorld('feroxAPI', {
   // Navigation & Tabs
   navigateTab: (tabId, url) => ipcRenderer.send('tab-navigate', { tabId, url }),
   createTab: (url) => ipcRenderer.send('tab-create', { url }),

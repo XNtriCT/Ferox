@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.bravest.browser"
+    namespace = "com.ferox.browser"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.bravest.browser"
+        applicationId = "com.ferox.browser"
         minSdk = 24
         targetSdk = 34
         versionCode = 2

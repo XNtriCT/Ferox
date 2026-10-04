@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Bravest - YouTube 3x & 4x Speed Turbo",
+  "name": "Ferox - YouTube 3x & 4x Speed Turbo",
   "version": "1.0.0",
   "description": "Enables native 3x and 4x playback speed multipliers on YouTube with pitch preservation and Brave Shields compatibility.",
   "permissions": [
@@ -12,7 +12,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Bravest YouTube Turbo"
+    "default_title": "Ferox YouTube Turbo"
   },
   "content_scripts": [
     {

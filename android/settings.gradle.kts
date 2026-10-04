@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "BravestBrowser"
+rootProject.name = "FeroxBrowser"
 include(":app")

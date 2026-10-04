@@ -1,4 +1,4 @@
-package com.bravest.browser
+package com.ferox.browser
 
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -43,10 +43,10 @@ class ShieldsEngine {
 
         const val COSMETIC_AD_BLOCK_JS = """
             (function() {
-                var style = document.getElementById('bravest-adblock-css');
+                var style = document.getElementById('ferox-adblock-css');
                 if (!style) {
                     style = document.createElement('style');
-                    style.id = 'bravest-adblock-css';
+                    style.id = 'ferox-adblock-css';
                     style.innerHTML = `
                         .video-ads, .ytp-ad-module, .ytp-ad-overlay-container,
                         .ytp-ad-player-overlay, ytd-ad-slot-renderer,
