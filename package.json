@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
-    "pack": "electron-builder --win portable"
+    "pack": "powershell -ExecutionPolicy Bypass -File scripts/build_fast_portable.ps1",
+    "pack:portable": "electron-builder --win portable"
   },
   "keywords": [
     "brave",
@@ -43,21 +44,12 @@
       "icon": "assets/icon.ico",
       "target": [
         {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
           "target": "nsis",
           "arch": [
             "x64"
           ]
         }
       ]
-    },
-    "portable": {
-      "artifactName": "Ferox.exe"
     },
     "nsis": {
       "oneClick": false,

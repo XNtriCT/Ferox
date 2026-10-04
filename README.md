@@ -16,7 +16,8 @@
 
 ### 🔗 Downloads & Releases
 
-* **💻 Windows Portable Executable**: [`Ferox.exe`](Ferox.exe) — also available as [`Ferox.lnk`](Ferox.lnk) shortcut
+* **💻 Windows Instant Portable**: [`Ferox.exe`](Ferox.exe) — extracts once on first run, then **opens instantly**; also available as [`Ferox.lnk`](Ferox.lnk) shortcut
+* **📦 Windows Installer**: [`Ferox-Setup.exe`](https://github.com/XNtriCT/Ferox/releases/download/v1.2.0/Ferox-Setup.exe)
 * **📱 Android APK (v1.2.0)**: [Download Ferox-Android-v1.2.0.apk](https://github.com/XNtriCT/Ferox/releases/download/v1.2.0/Ferox-Android-v1.2.0.apk)
 * **🐙 GitHub Repository**: [https://github.com/XNtriCT/Ferox](https://github.com/XNtriCT/Ferox)
 
