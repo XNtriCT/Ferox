@@ -6,7 +6,9 @@ import android.animation.PropertyValuesHolder
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
@@ -72,6 +74,7 @@ class MainActivity : AppCompatActivity() {
 
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
+    private var previousOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
 
     /** Playback state per source WebView ("browse" / "player"). */
     private val playbackStates = mutableMapOf("browse" to false, "player" to false)
@@ -670,6 +673,9 @@ class MainActivity : AppCompatActivity() {
             )
         )
         fullscreenContainer.visibility = View.VISIBLE
+        // Fullscreen video plays in landscape, like Chrome/Brave/YouTube.
+        previousOrientation = requestedOrientation
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         enterImmersiveMode()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
@@ -681,8 +687,17 @@ class MainActivity : AppCompatActivity() {
         customViewCallback?.onCustomViewHidden()
         customView = null
         customViewCallback = null
+        requestedOrientation = previousOrientation
         exitImmersiveMode()
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Rotation during fullscreen can bring the system bars back; re-hide them.
+        if (customView != null) {
+            window.decorView.post { enterImmersiveMode() }
+        }
     }
 
     private fun enterImmersiveMode() {
@@ -706,7 +721,8 @@ class MainActivity : AppCompatActivity() {
     // ==========================================
     // Background playback service + JS bridge
     // ==========================================
-    private inner class FeroxBridge(private val source: String) {
+    // Public so the WebView JS bridge can always reflectively invoke it.
+    inner class FeroxBridge(private val source: String) {
         @JavascriptInterface
         fun onPlaybackState(playing: Boolean) {
             runOnUiThread {
@@ -727,16 +743,45 @@ class MainActivity : AppCompatActivity() {
         if (playing) {
             if (!playbackServiceStarted) {
                 ensureNotificationPermission()
-                ContextCompat.startForegroundService(
-                    this,
-                    Intent(this, PlaybackService::class.java)
-                )
-                playbackServiceStarted = true
+                try {
+                    ContextCompat.startForegroundService(
+                        this,
+                        Intent(this, PlaybackService::class.java)
+                    )
+                    playbackServiceStarted = true
+                } catch (e: Exception) {
+                    // Background FGS starts can be rejected on Android 12+;
+                    // playback itself keeps running regardless.
+                    playbackServiceStarted = false
+                }
             }
         } else if (playbackServiceStarted) {
             stopService(Intent(this, PlaybackService::class.java))
             playbackServiceStarted = false
         }
+    }
+
+    private fun setWebViewBackground(background: Boolean) {
+        val js = "window.feroxSetBackground && window.feroxSetBackground($background);"
+        try {
+            webView.evaluateJavascript(js, null)
+        } catch (_: Exception) {}
+        try {
+            playerWebView?.evaluateJavascript(js, null)
+        } catch (_: Exception) {}
+    }
+
+    override fun onStart() {
+        super.onStart()
+        setWebViewBackground(false)
+    }
+
+    override fun onStop() {
+        // Keep the WebViews resumed (never call webView.onPause()) so audio
+        // keeps playing, and tell the pages they are in the background so the
+        // engine can defend against YouTube's pause-on-hidden.
+        setWebViewBackground(true)
+        super.onStop()
     }
 
     private fun ensureNotificationPermission() {

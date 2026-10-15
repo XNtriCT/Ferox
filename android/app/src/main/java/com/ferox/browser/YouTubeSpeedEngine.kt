@@ -22,6 +22,48 @@ object YouTubeSpeedEngine {
             try { Object.defineProperty(document, 'webkitVisibilityState', { value: 'visible', writable: false }); } catch (_) {}
             try { Object.defineProperty(document, 'webkitHidden', { value: false, writable: false }); } catch (_) {}
             document.addEventListener('visibilitychange', function(e) { e.stopImmediatePropagation(); }, true);
+            try { document.hasFocus = function() { return true; }; } catch (_) {}
+
+            // Native tells us when the app goes to / returns from the
+            // background. If YouTube force-pauses on hidden, immediately
+            // resume the videos that were playing. The short window avoids
+            // fighting a deliberate pause from the lock screen later.
+            window.__ferox_background = false;
+            var feroxWasPlaying = [];
+            var feroxForcePlayUntil = 0;
+
+            function feroxResumeIfNeeded() {
+                if (!window.__ferox_background) return;
+                if (Date.now() > feroxForcePlayUntil) return;
+                feroxWasPlaying.forEach(function(v) {
+                    try {
+                        if (v.paused && !v.ended) {
+                            var p = v.play();
+                            if (p && typeof p.catch === 'function') p.catch(function() {});
+                        }
+                    } catch (_) {}
+                });
+            }
+
+            window.feroxSetBackground = function(bg) {
+                window.__ferox_background = !!bg;
+                if (bg) {
+                    feroxWasPlaying = [];
+                    document.querySelectorAll('video').forEach(function(v) {
+                        if (!v.paused && !v.ended) feroxWasPlaying.push(v);
+                    });
+                    feroxForcePlayUntil = Date.now() + 6000;
+                    feroxResumeIfNeeded();
+                } else {
+                    feroxForcePlayUntil = 0;
+                    feroxWasPlaying = [];
+                }
+            };
+
+            document.addEventListener('pause', function() {
+                if (window.__ferox_background) setTimeout(feroxResumeIfNeeded, 150);
+            }, true);
+            setInterval(feroxResumeIfNeeded, 1000);
 
             // Report playback state to the native PlaybackService so Android
             // keeps the process alive while audio is playing in the background.
