@@ -15,6 +15,8 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
@@ -24,6 +26,7 @@ import android.view.View
 import android.view.WindowManager
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.DecelerateInterpolator
+import android.util.Log
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.webkit.*
@@ -35,6 +38,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.util.Locale
 import kotlin.math.abs
@@ -84,6 +89,7 @@ class MainActivity : AppCompatActivity() {
     private val playbackStates = mutableMapOf("browse" to false, "player" to false)
     private var playbackServiceStarted = false
     private var appInBackground = false
+    private var documentStartSupported = false
 
     private val shieldsEngine = ShieldsEngine()
     private val speedOptions = arrayOf(
@@ -113,6 +119,11 @@ class MainActivity : AppCompatActivity() {
         initViews()
         setupSpeedBar()
         setupFullscreenSpeedSlider()
+
+        documentStartSupported =
+            WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
+        Log.i(TAG, "Document-start script supported: $documentStartSupported")
+
         setupWebView()
         setupBubble()
         setupListeners()
@@ -126,8 +137,50 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        // Initial launch: YouTube
-        webView.loadUrl("https://www.youtube.com")
+        // Initial launch: YouTube (or a URL opened through an external intent)
+        val startUrl = intent?.data?.toString()
+        if (!startUrl.isNullOrEmpty() && startUrl.startsWith("http", ignoreCase = true)) {
+            if (isYouTubeWatchUrl(startUrl)) {
+                webView.loadUrl("https://www.youtube.com")
+                openPlayerInternal(startUrl)
+            } else {
+                webView.loadUrl(startUrl)
+            }
+        } else {
+            webView.loadUrl("https://www.youtube.com")
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val url = intent.data?.toString() ?: return
+        if (!url.startsWith("http", ignoreCase = true)) return
+        if (isYouTubeWatchUrl(url)) {
+            openPlayerInternal(url)
+        } else {
+            webView.loadUrl(url)
+        }
+    }
+
+    /**
+     * Registers the Ferox engine as a document-start script. Running before any
+     * page script is essential: YouTube registers its visibility listeners and
+     * captures media APIs during page load, so late injection cannot defeat its
+     * pause-on-hidden logic.
+     */
+    private fun registerDocumentStartScript(target: WebView) {
+        if (!documentStartSupported) return
+        try {
+            WebViewCompat.addDocumentStartJavaScript(
+                target,
+                YouTubeSpeedEngine.SPEED_INJECTION_JS,
+                setOf("*")
+            )
+            Log.i(TAG, "Document-start script registered")
+        } catch (e: Exception) {
+            Log.w(TAG, "Document-start script registration failed: ${e.message}")
+        }
     }
 
     private fun initViews() {
@@ -199,7 +252,7 @@ class MainActivity : AppCompatActivity() {
     private fun ensurePlayerWebView(): WebView {
         playerWebView?.let { return it }
 
-        val wv = WebView(this)
+        val wv = AlwaysVisibleWebView(this)
         wv.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -210,6 +263,7 @@ class MainActivity : AppCompatActivity() {
             userAgentString = webView.settings.userAgentString
         }
         wv.addJavascriptInterface(FeroxBridge("player"), "FeroxBridge")
+        registerDocumentStartScript(wv)
 
         wv.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(
@@ -233,7 +287,7 @@ class MainActivity : AppCompatActivity() {
                 progressBar.visibility = View.GONE
                 shieldsEngine.injectCosmeticFilter(wv)
                 if (url != null && url.contains("youtube.com", ignoreCase = true)) {
-                    YouTubeSpeedEngine.inject(wv)
+                    if (!documentStartSupported) YouTubeSpeedEngine.inject(wv)
                     injectSpeed(wv, currentSpeed)
                     if (playerMini) wv.evaluateJavascript(MINI_CSS_JS, null)
                 }
@@ -647,6 +701,7 @@ class MainActivity : AppCompatActivity() {
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
 
         webView.addJavascriptInterface(FeroxBridge("browse"), "FeroxBridge")
+        registerDocumentStartScript(webView)
 
         shieldsEngine.setOnBlockedListener { count ->
             runOnUiThread {
@@ -699,7 +754,7 @@ class MainActivity : AppCompatActivity() {
                 progressBar.visibility = View.GONE
                 shieldsEngine.injectCosmeticFilter(webView)
                 if (url != null && url.contains("youtube.com", ignoreCase = true)) {
-                    YouTubeSpeedEngine.inject(webView)
+                    if (!documentStartSupported) YouTubeSpeedEngine.inject(webView)
                     webView.evaluateJavascript(WATCHDOG_JS, null)
                     injectSpeed(webView, currentSpeed)
                 }
@@ -810,10 +865,16 @@ class MainActivity : AppCompatActivity() {
     inner class FeroxBridge(private val source: String) {
         @JavascriptInterface
         fun onPlaybackState(playing: Boolean) {
+            Log.i(TAG, "Bridge playback[$source]=$playing")
             runOnUiThread {
                 playbackStates[source] = playing
                 updatePlaybackService()
             }
+        }
+
+        @JavascriptInterface
+        fun log(message: String?) {
+            Log.i(TAG, "JS[$source]: $message")
         }
 
         @JavascriptInterface
@@ -835,10 +896,12 @@ class MainActivity : AppCompatActivity() {
                         Intent(this, PlaybackService::class.java)
                     )
                     playbackServiceStarted = true
+                    Log.i(TAG, "PlaybackService started (background keep-alive)")
                 } catch (e: Exception) {
                     // Background FGS starts can be rejected on Android 12+;
                     // playback itself keeps running regardless.
                     playbackServiceStarted = false
+                    Log.w(TAG, "PlaybackService start failed: ${e.message}")
                 }
             }
         } else if (playbackServiceStarted && !appInBackground) {
@@ -846,6 +909,7 @@ class MainActivity : AppCompatActivity() {
             // service stays so the notification can resume playback.
             stopService(Intent(this, PlaybackService::class.java))
             playbackServiceStarted = false
+            Log.i(TAG, "PlaybackService stopped")
         }
     }
 
@@ -864,6 +928,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setWebViewBackground(background: Boolean) {
+        Log.i(TAG, "App background=$background")
         val js = "window.feroxSetBackground && window.feroxSetBackground($background);"
         try {
             webView.evaluateJavascript(js, null)
@@ -871,6 +936,23 @@ class MainActivity : AppCompatActivity() {
         try {
             playerWebView?.evaluateJavascript(js, null)
         } catch (_: Exception) {}
+    }
+
+    override fun onResume() {
+        super.onResume()
+        appInBackground = false
+        setWebViewBackground(false)
+        updatePlaybackService()
+    }
+
+    override fun onPause() {
+        // onStop can arrive seconds after the app actually leaves the
+        // foreground, but YouTube pauses playback instantly. Arm the page
+        // pause-block now and schedule native-driven resumes as a safety net.
+        appInBackground = true
+        setWebViewBackground(true)
+        scheduleBackgroundResumes()
+        super.onPause()
     }
 
     override fun onStart() {
@@ -881,12 +963,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
-        // Keep the WebViews resumed (never call webView.onPause()) so audio
-        // keeps playing, and tell the pages they are in the background so the
-        // engine can defend against YouTube's pause-on-hidden.
+        // Never call webView.onPause(): the WebViews must stay resumed so
+        // audio keeps playing in the background.
         appInBackground = true
         setWebViewBackground(true)
         super.onStop()
+    }
+
+    /**
+     * Resumes background playback from the native side a few times after the
+     * app leaves the foreground. Page timers are throttled while hidden, so a
+     * native nudge guarantees the video comes back even if the browser paused
+     * it before the page-level block was armed.
+     */
+    private fun scheduleBackgroundResumes() {
+        val handler = Handler(Looper.getMainLooper())
+        for (delay in longArrayOf(800L, 2500L, 6000L)) {
+            handler.postDelayed({
+                if (!appInBackground) return@postDelayed
+                val js = "window.feroxResumeBackground && window.feroxResumeBackground();"
+                try { webView.evaluateJavascript(js, null) } catch (_: Exception) {}
+                try { playerWebView?.evaluateJavascript(js, null) } catch (_: Exception) {}
+            }, delay)
+        }
     }
 
     private fun ensureNotificationPermission() {
@@ -1005,6 +1104,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val TAG = "FeroxPlayback"
+
         /**
          * Watches for YouTube SPA navigations that reach a watch page without
          * a full page load. Those are moved into the dedicated player WebView
