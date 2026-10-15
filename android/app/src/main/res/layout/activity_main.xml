@@ -131,14 +131,27 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
-            <!-- Dedicated YouTube watch page player: full size or mini player.
-                 The WebView itself is added programmatically so it is only
-                 created when a video is opened. -->
+            <!-- Dedicated YouTube watch page player: full size or scaled into
+                 the mini player rect. The WebView itself is added
+                 programmatically so it is only created when a video opens.
+                 In mini mode this container is scaled/translated, so the
+                 WebView itself is never resized (YouTube keeps playing). -->
             <FrameLayout
                 android:id="@+id/playerContainer"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:background="#000000"
+                android:visibility="gone" />
+
+            <!-- Mini player tap/close overlay, aligned with the scaled
+                 player rect (208dp x 117dp = 16:9). -->
+            <FrameLayout
+                android:id="@+id/miniOverlay"
+                android:layout_width="208dp"
+                android:layout_height="117dp"
+                android:layout_gravity="bottom|end"
+                android:layout_marginEnd="8dp"
+                android:layout_marginBottom="8dp"
                 android:visibility="gone">
 
                 <!-- Transparent shield so tapping the mini player expands it -->
@@ -147,8 +160,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:clickable="true"
-                    android:focusable="true"
-                    android:visibility="gone" />
+                    android:focusable="true" />
 
                 <!-- Close button shown only in mini player mode -->
                 <ImageButton
@@ -162,8 +174,7 @@
                     android:scaleType="fitCenter"
                     android:src="@android:drawable/ic_menu_close_clear_cancel"
                     android:tint="#FFFFFF"
-                    android:contentDescription="Close mini player"
-                    android:visibility="gone" />
+                    android:contentDescription="Close mini player" />
             </FrameLayout>
         </FrameLayout>
 
@@ -299,12 +310,55 @@
         android:fontFamily="sans-serif-medium"
         android:visibility="gone" />
 
-    <!-- True fullscreen video overlay (covers the whole screen) -->
+    <!-- True fullscreen video overlay (covers the whole screen). The video
+         view is inset on the right so the vertical speed slider never covers
+         the video content. -->
     <FrameLayout
         android:id="@+id/fullscreenContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#000000"
-        android:visibility="gone" />
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/fullscreenSpeedPanel"
+            android:layout_width="56dp"
+            android:layout_height="280dp"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="6dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_speed_readout"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/fullscreenSpeedLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="1x"
+                android:textColor="#FB542B"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif-medium"
+                android:paddingBottom="4dp" />
+
+            <FrameLayout
+                android:layout_width="56dp"
+                android:layout_height="220dp">
+
+                <SeekBar
+                    android:id="@+id/fullscreenSpeedSeek"
+                    android:layout_width="220dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="center"
+                    android:rotation="-90"
+                    android:max="60"
+                    android:progress="0"
+                    android:progressTint="#FB542B"
+                    android:progressBackgroundTint="#55FFFFFF"
+                    android:thumbTint="#FB542B" />
+            </FrameLayout>
+        </LinearLayout>
+    </FrameLayout>
 
 </FrameLayout>

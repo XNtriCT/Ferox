@@ -22,9 +22,11 @@ import androidx.core.app.NotificationCompat
 class PlaybackService : Service() {
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var isPlaying = true
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         createNotificationChannel()
         try {
             val powerManager = getSystemService(POWER_SERVICE) as PowerManager
@@ -41,6 +43,7 @@ class PlaybackService : Service() {
     }
 
     override fun onDestroy() {
+        if (instance === this) instance = null
         try {
             wakeLock?.let { if (it.isHeld) it.release() }
         } catch (_: Exception) {}
@@ -49,13 +52,30 @@ class PlaybackService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            stopForegroundCompat()
-            stopSelf()
-            return START_NOT_STICKY
+        when (intent?.action) {
+            ACTION_STOP -> {
+                stopForegroundCompat()
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            ACTION_TOGGLE -> {
+                // Ask the activity to pause/resume the WebView playback.
+                toggleCallback?.invoke()
+                return START_STICKY
+            }
         }
         startForeground(NOTIFICATION_ID, buildNotification())
         return START_STICKY
+    }
+
+    /** Refreshes the notification icon/label when playback state changes. */
+    fun setPlaying(playing: Boolean) {
+        if (isPlaying == playing) return
+        isPlaying = playing
+        try {
+            val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(NOTIFICATION_ID, buildNotification())
+        } catch (_: Exception) {}
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -73,9 +93,15 @@ class PlaybackService : Service() {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val toggleIntent = PendingIntent.getService(
+            this,
+            1,
+            Intent(this, PlaybackService::class.java).setAction(ACTION_TOGGLE),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentTitle("Ferox is playing audio")
+            .setContentTitle(if (isPlaying) "Ferox is playing audio" else "Ferox playback paused")
             .setContentText("Tap to return to the video")
             .setContentIntent(openIntent)
             .setOngoing(true)
@@ -83,7 +109,12 @@ class PlaybackService : Service() {
             .setShowWhen(false)
             .setColor(0xFFFB542B.toInt())
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
+        if (isPlaying) {
+            builder.addAction(android.R.drawable.ic_media_pause, "Pause", toggleIntent)
+        } else {
+            builder.addAction(android.R.drawable.ic_media_play, "Play", toggleIntent)
+        }
+        return builder.build()
     }
 
     private fun createNotificationChannel() {
@@ -114,5 +145,15 @@ class PlaybackService : Service() {
         const val CHANNEL_ID = "ferox_playback"
         const val NOTIFICATION_ID = 1001
         const val ACTION_STOP = "com.ferox.browser.action.STOP_PLAYBACK"
+        const val ACTION_TOGGLE = "com.ferox.browser.action.TOGGLE_PLAYBACK"
+
+        /** Live service instance so the activity can refresh the notification. */
+        @Volatile
+        var instance: PlaybackService? = null
+            private set
+
+        /** Invoked when the notification Pause/Play action is tapped. */
+        @Volatile
+        var toggleCallback: (() -> Unit)? = null
     }
 }

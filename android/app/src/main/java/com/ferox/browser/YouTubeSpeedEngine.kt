@@ -16,7 +16,12 @@ object YouTubeSpeedEngine {
             // 1. Background Playback Override
             //    YouTube pauses web playback when the page becomes hidden (a
             //    Premium-only feature on the web). Keep the page believing it
-            //    is always visible so audio continues in the background.
+            //    is always visible, and block programmatic pauses while the
+            //    app is backgrounded so the page cannot stop playback. The
+            //    user can still pause through the Ferox notification.
+            window.__ferox_background = false;
+            window.__ferox_allow_pause = false;
+
             try { Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: false }); } catch (_) {}
             try { Object.defineProperty(document, 'hidden', { value: false, writable: false }); } catch (_) {}
             try { Object.defineProperty(document, 'webkitVisibilityState', { value: 'visible', writable: false }); } catch (_) {}
@@ -24,11 +29,61 @@ object YouTubeSpeedEngine {
             document.addEventListener('visibilitychange', function(e) { e.stopImmediatePropagation(); }, true);
             try { document.hasFocus = function() { return true; }; } catch (_) {}
 
-            // Native tells us when the app goes to / returns from the
-            // background. If YouTube force-pauses on hidden, immediately
-            // resume the videos that were playing. The short window avoids
-            // fighting a deliberate pause from the lock screen later.
-            window.__ferox_background = false;
+            try {
+                var feroxNativePause = HTMLMediaElement.prototype.pause;
+                HTMLMediaElement.prototype.pause = function() {
+                    if (window.__ferox_background && !window.__ferox_allow_pause) {
+                        return;
+                    }
+                    return feroxNativePause.apply(this, arguments);
+                };
+            } catch (_) {}
+
+            window.feroxUserPause = function() {
+                window.__ferox_allow_pause = true;
+                try {
+                    document.querySelectorAll('video').forEach(function(v) {
+                        try { v.pause(); } catch (_) {}
+                    });
+                } catch (_) {}
+                setTimeout(function() { window.__ferox_allow_pause = false; }, 600);
+            };
+
+            window.feroxUserPlay = function() {
+                document.querySelectorAll('video').forEach(function(v) {
+                    try {
+                        var p = v.play();
+                        if (p && typeof p.catch === 'function') p.catch(function() {});
+                    } catch (_) {}
+                });
+            };
+
+            // Keeps playback alive briefly after an in-app transition (e.g.
+            // the mini player appearing) even if something pauses the video.
+            window.feroxGuardPlayback = function(ms) {
+                var until = Date.now() + (ms || 2500);
+                var guarded = [];
+                document.querySelectorAll('video').forEach(function(v) {
+                    if (!v.paused && !v.ended) guarded.push(v);
+                });
+                var handler = function() {
+                    if (Date.now() > until) {
+                        document.removeEventListener('pause', handler, true);
+                        return;
+                    }
+                    setTimeout(function() {
+                        guarded.forEach(function(v) {
+                            try {
+                                if (v.paused && !v.ended) {
+                                    var p = v.play();
+                                    if (p && typeof p.catch === 'function') p.catch(function() {});
+                                }
+                            } catch (_) {}
+                        });
+                    }, 120);
+                };
+                document.addEventListener('pause', handler, true);
+            };
             var feroxWasPlaying = [];
             var feroxForcePlayUntil = 0;
 

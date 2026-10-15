@@ -66,6 +66,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var playerContainer: FrameLayout
     private lateinit var miniTouchShield: View
     private lateinit var btnCloseMini: ImageButton
+    private lateinit var miniOverlay: FrameLayout
+    private lateinit var fullscreenSpeedPanel: LinearLayout
+    private lateinit var fullscreenSpeedSeek: SeekBar
+    private lateinit var fullscreenSpeedLabel: TextView
 
     /** Dedicated WebView for YouTube watch pages. Created lazily. */
     private var playerWebView: WebView? = null
@@ -79,6 +83,7 @@ class MainActivity : AppCompatActivity() {
     /** Playback state per source WebView ("browse" / "player"). */
     private val playbackStates = mutableMapOf("browse" to false, "player" to false)
     private var playbackServiceStarted = false
+    private var appInBackground = false
 
     private val shieldsEngine = ShieldsEngine()
     private val speedOptions = arrayOf(
@@ -107,9 +112,12 @@ class MainActivity : AppCompatActivity() {
 
         initViews()
         setupSpeedBar()
+        setupFullscreenSpeedSlider()
         setupWebView()
         setupBubble()
         setupListeners()
+
+        PlaybackService.toggleCallback = { togglePlaybackFromNotification() }
 
         // Handle Android Back Navigation: fullscreen -> player -> mini -> web history
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -146,6 +154,10 @@ class MainActivity : AppCompatActivity() {
         playerContainer = findViewById(R.id.playerContainer)
         miniTouchShield = findViewById(R.id.miniTouchShield)
         btnCloseMini = findViewById(R.id.btnCloseMini)
+        miniOverlay = findViewById(R.id.miniOverlay)
+        fullscreenSpeedPanel = findViewById(R.id.fullscreenSpeedPanel)
+        fullscreenSpeedSeek = findViewById(R.id.fullscreenSpeedSeek)
+        fullscreenSpeedLabel = findViewById(R.id.fullscreenSpeedLabel)
     }
 
     // ==========================================
@@ -222,7 +234,7 @@ class MainActivity : AppCompatActivity() {
                 shieldsEngine.injectCosmeticFilter(wv)
                 if (url != null && url.contains("youtube.com", ignoreCase = true)) {
                     YouTubeSpeedEngine.inject(wv)
-                    pushSpeedTo(wv, currentSpeed, force = true)
+                    injectSpeed(wv, currentSpeed)
                     if (playerMini) wv.evaluateJavascript(MINI_CSS_JS, null)
                 }
             }
@@ -267,38 +279,64 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun expandPlayer() {
-        val lp = playerContainer.layoutParams as FrameLayout.LayoutParams
-        lp.width = FrameLayout.LayoutParams.MATCH_PARENT
-        lp.height = FrameLayout.LayoutParams.MATCH_PARENT
-        lp.gravity = Gravity.TOP or Gravity.START
-        lp.setMargins(0, 0, 0, 0)
-        playerContainer.layoutParams = lp
+        playerContainer.pivotX = 0f
+        playerContainer.pivotY = 0f
+        playerContainer.scaleX = 1f
+        playerContainer.scaleY = 1f
+        playerContainer.translationX = 0f
+        playerContainer.translationY = 0f
         playerContainer.visibility = View.VISIBLE
-        miniTouchShield.visibility = View.GONE
-        btnCloseMini.visibility = View.GONE
+        miniOverlay.visibility = View.GONE
         playerWebView?.evaluateJavascript(EXIT_MINI_CSS_JS, null)
         playerExpanded = true
         playerMini = false
     }
 
+    /**
+     * Shrinks the player into the mini rect by scaling/translating the whole
+     * container. The WebView itself is never resized, so YouTube does not see
+     * a viewport change (which used to pause playback when the mini appeared).
+     */
     private fun minimizePlayer() {
+        val content = playerContainer.parent as? View ?: return
+        val width = content.width
+        val height = content.height
+        if (width <= 0 || height <= 0) return
+
         val density = resources.displayMetrics.density
-        val lp = playerContainer.layoutParams as FrameLayout.LayoutParams
-        lp.width = (208 * density).toInt()
-        lp.height = (117 * density).toInt()
-        lp.gravity = Gravity.BOTTOM or Gravity.END
-        lp.setMargins(0, 0, (8 * density).toInt(), (8 * density).toInt())
-        playerContainer.layoutParams = lp
+        val margin = 8f * density
+        val miniWidth = 208f * density
+        val miniHeight = miniWidth * 9f / 16f
+        val scale = miniWidth / width
+
+        playerContainer.pivotX = 0f
+        playerContainer.pivotY = 0f
+        playerContainer.scaleX = scale
+        playerContainer.scaleY = scale
+        playerContainer.translationX = width - miniWidth - margin
+        playerContainer.translationY = height - miniHeight - margin
+
         playerContainer.visibility = View.VISIBLE
-        miniTouchShield.visibility = View.VISIBLE
-        btnCloseMini.visibility = View.VISIBLE
+        miniOverlay.visibility = View.VISIBLE
         playerWebView?.evaluateJavascript(MINI_CSS_JS, null)
+        // Safety net: if anything pauses the video right after minimizing,
+        // resume it so the mini player keeps playing.
+        playerWebView?.evaluateJavascript(
+            "window.feroxGuardPlayback && window.feroxGuardPlayback(3000);",
+            null
+        )
         playerExpanded = false
         playerMini = true
     }
 
     private fun closePlayer() {
         val wv = playerWebView ?: return
+        playerContainer.pivotX = 0f
+        playerContainer.pivotY = 0f
+        playerContainer.scaleX = 1f
+        playerContainer.scaleY = 1f
+        playerContainer.translationX = 0f
+        playerContainer.translationY = 0f
         playerContainer.removeView(wv)
         wv.stopLoading()
         wv.destroy()
@@ -306,6 +344,7 @@ class MainActivity : AppCompatActivity() {
         playerExpanded = false
         playerMini = false
         playerContainer.visibility = View.GONE
+        miniOverlay.visibility = View.GONE
         playbackStates["player"] = false
         updatePlaybackService()
     }
@@ -368,9 +407,38 @@ class MainActivity : AppCompatActivity() {
         pushSpeedToWeb(speed, force = true)
     }
 
+    // ==========================================
+    // Fullscreen vertical speed slider (right edge strip)
+    // ==========================================
+    private fun setupFullscreenSpeedSlider() {
+        fullscreenSpeedSeek.max = 60 // 1.00x - 4.00x in 0.05 steps
+        fullscreenSpeedSeek.progress = speedToProgress(currentSpeed)
+        fullscreenSpeedSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                val speed = 1f + progress * 0.05f
+                setPlaybackSpeed((speed * 100f).roundToInt() / 100f)
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+    }
+
+    private fun speedToProgress(speed: Float): Int {
+        val clamped = speed.coerceIn(1f, 4f)
+        return ((clamped - 1f) / 0.05f).roundToInt().coerceIn(0, 60)
+    }
+
     private fun updateSpeedUi(speed: Float) {
         btnSpeedPill.text = "⚡ ${formatSpeed(speed)}"
         bubbleLabel.text = formatSpeed(speed)
+        fullscreenSpeedLabel.text = formatSpeed(speed)
+        val progress = speedToProgress(speed)
+        if (fullscreenSpeedSeek.progress != progress) {
+            fullscreenSpeedSeek.progress = progress
+        }
 
         // Light up the nearest preset pill (approximate indication for fine tuning)
         var nearest: View? = null
@@ -534,16 +602,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun pushSpeedToWeb(speed: Float, force: Boolean = false) {
-        pushSpeedTo(webView, speed, force)
-    }
-
-    private fun pushSpeedTo(target: WebView, speed: Float, force: Boolean = false) {
         val now = SystemClock.uptimeMillis()
         if (!force && now - lastJsPushTime < 33L) return
         lastJsPushTime = now
 
         val value = String.format(Locale.US, "%.2f", speed)
-        target.evaluateJavascript("if (window.feroxSetSpeed) window.feroxSetSpeed($value);", null)
+        val js = "if (window.feroxSetSpeed) window.feroxSetSpeed($value);"
+        try { webView.evaluateJavascript(js, null) } catch (_: Exception) {}
+        try { playerWebView?.evaluateJavascript(js, null) } catch (_: Exception) {}
+    }
+
+    private fun injectSpeed(target: WebView, speed: Float) {
+        val value = String.format(Locale.US, "%.2f", speed)
+        try {
+            target.evaluateJavascript("if (window.feroxSetSpeed) window.feroxSetSpeed($value);", null)
+        } catch (_: Exception) {}
     }
 
     private fun formatSpeed(speed: Float): String {
@@ -628,7 +701,7 @@ class MainActivity : AppCompatActivity() {
                 if (url != null && url.contains("youtube.com", ignoreCase = true)) {
                     YouTubeSpeedEngine.inject(webView)
                     webView.evaluateJavascript(WATCHDOG_JS, null)
-                    pushSpeedToWeb(currentSpeed, force = true)
+                    injectSpeed(webView, currentSpeed)
                 }
             }
         }
@@ -665,13 +738,21 @@ class MainActivity : AppCompatActivity() {
         }
         customView = view
         customViewCallback = callback
+        // Reserve a strip on the right for the vertical speed slider so it
+        // never overlays the video.
+        val density = resources.displayMetrics.density
+        val stripWidth = (62 * density).toInt()
         fullscreenContainer.addView(
             view,
+            0,
             FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
-            )
+            ).apply { rightMargin = stripWidth }
         )
+        fullscreenSpeedLabel.text = formatSpeed(currentSpeed)
+        fullscreenSpeedSeek.progress = speedToProgress(currentSpeed)
+        fullscreenSpeedPanel.visibility = View.VISIBLE
         fullscreenContainer.visibility = View.VISIBLE
         // Fullscreen video plays in landscape, like Chrome/Brave/YouTube.
         previousOrientation = requestedOrientation
@@ -683,6 +764,7 @@ class MainActivity : AppCompatActivity() {
     private fun hideFullscreenView() {
         if (customView == null) return
         fullscreenContainer.removeView(customView)
+        fullscreenSpeedPanel.visibility = View.GONE
         fullscreenContainer.visibility = View.GONE
         customViewCallback?.onCustomViewHidden()
         customView = null
@@ -697,6 +779,9 @@ class MainActivity : AppCompatActivity() {
         // Rotation during fullscreen can bring the system bars back; re-hide them.
         if (customView != null) {
             window.decorView.post { enterImmersiveMode() }
+        }
+        if (playerMini) {
+            playerContainer.post { minimizePlayer() }
         }
     }
 
@@ -740,6 +825,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updatePlaybackService() {
         val playing = playbackStates.values.any { it }
+        PlaybackService.instance?.setPlaying(playing)
         if (playing) {
             if (!playbackServiceStarted) {
                 ensureNotificationPermission()
@@ -755,10 +841,26 @@ class MainActivity : AppCompatActivity() {
                     playbackServiceStarted = false
                 }
             }
-        } else if (playbackServiceStarted) {
+        } else if (playbackServiceStarted && !appInBackground) {
+            // Stop only when the user is in the app. While backgrounded the
+            // service stays so the notification can resume playback.
             stopService(Intent(this, PlaybackService::class.java))
             playbackServiceStarted = false
         }
+    }
+
+    private fun togglePlaybackFromNotification() {
+        val playing = playbackStates.values.any { it }
+        val js = if (playing) {
+            "window.feroxUserPause && window.feroxUserPause();"
+        } else {
+            "window.feroxUserPlay && window.feroxUserPlay();"
+        }
+        try { webView.evaluateJavascript(js, null) } catch (_: Exception) {}
+        try { playerWebView?.evaluateJavascript(js, null) } catch (_: Exception) {}
+        playbackStates["browse"] = !playing
+        playbackStates["player"] = !playing
+        updatePlaybackService()
     }
 
     private fun setWebViewBackground(background: Boolean) {
@@ -773,13 +875,16 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        appInBackground = false
         setWebViewBackground(false)
+        updatePlaybackService()
     }
 
     override fun onStop() {
         // Keep the WebViews resumed (never call webView.onPause()) so audio
         // keeps playing, and tell the pages they are in the background so the
         // engine can defend against YouTube's pause-on-hidden.
+        appInBackground = true
         setWebViewBackground(true)
         super.onStop()
     }
@@ -887,6 +992,7 @@ class MainActivity : AppCompatActivity() {
         glowAnimator?.cancel()
         rippleAnimator1?.cancel()
         rippleAnimator2?.cancel()
+        PlaybackService.toggleCallback = null
         playerWebView?.let {
             playerContainer.removeView(it)
             it.destroy()
