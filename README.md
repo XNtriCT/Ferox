@@ -60,6 +60,8 @@ The 1x–4x speed bar sits directly below the URL bar. The active speed glows in
   - Tap and hold the bubble, drag your finger anywhere on screen: **right = faster, left = slower**, fully continuous **1x → 4x**.
   - Release to deactivate and resume normal controls; the nearest top-bar preset lights up as the approximate indicator.
   - Full-screen live speed readout, haptic feedback, ad-skipping and background audio playback.
+  - **Mini player & true fullscreen**: pressing back while a video plays shrinks it into a floating mini player — the feed stays exactly where you left it (no reload). Tap the mini player to expand, or use fullscreen video with hidden system bars.
+  - **Background play**: audio keeps playing when you leave the app or lock the screen.
 - **🦁 Full Brave Shields Engine**:
   - Blocks banner ads, tracking scripts, and popups.
   - Automatically strips YouTube video ads (pre-rolls and mid-rolls).

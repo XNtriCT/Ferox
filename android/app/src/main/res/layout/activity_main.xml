@@ -120,7 +120,7 @@
             </LinearLayout>
         </HorizontalScrollView>
 
-        <!-- Content Area: WebView & Fullscreen Container -->
+        <!-- Content Area: Browse WebView & Dedicated Player WebView -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
@@ -131,12 +131,40 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
+            <!-- Dedicated YouTube watch page player: full size or mini player.
+                 The WebView itself is added programmatically so it is only
+                 created when a video is opened. -->
             <FrameLayout
-                android:id="@+id/fullscreenContainer"
+                android:id="@+id/playerContainer"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:background="#000000"
-                android:visibility="gone" />
+                android:visibility="gone">
+
+                <!-- Transparent shield so tapping the mini player expands it -->
+                <View
+                    android:id="@+id/miniTouchShield"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:visibility="gone" />
+
+                <!-- Close button shown only in mini player mode -->
+                <ImageButton
+                    android:id="@+id/btnCloseMini"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="top|end"
+                    android:layout_margin="4dp"
+                    android:background="#CC000000"
+                    android:padding="6dp"
+                    android:scaleType="fitCenter"
+                    android:src="@android:drawable/ic_menu_close_clear_cancel"
+                    android:tint="#FFFFFF"
+                    android:contentDescription="Close mini player"
+                    android:visibility="gone" />
+            </FrameLayout>
         </FrameLayout>
 
         <!-- Bottom Navigation Bar (buttons pushed to the sides to make room for the bubble) -->
@@ -269,6 +297,14 @@
         android:textStyle="bold"
         android:textSize="26sp"
         android:fontFamily="sans-serif-medium"
+        android:visibility="gone" />
+
+    <!-- True fullscreen video overlay (covers the whole screen) -->
+    <FrameLayout
+        android:id="@+id/fullscreenContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#000000"
         android:visibility="gone" />
 
 </FrameLayout>

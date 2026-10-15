@@ -13,10 +13,47 @@ object YouTubeSpeedEngine {
 
             let preferredSpeed = parseFloat(localStorage.getItem('ferox_speed') || localStorage.getItem('bravest_speed')) || 1.0;
 
-            // 1. Background Playback Override (Brave feature)
-            Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: false });
-            Object.defineProperty(document, 'hidden', { value: false, writable: false });
+            // 1. Background Playback Override
+            //    YouTube pauses web playback when the page becomes hidden (a
+            //    Premium-only feature on the web). Keep the page believing it
+            //    is always visible so audio continues in the background.
+            try { Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: false }); } catch (_) {}
+            try { Object.defineProperty(document, 'hidden', { value: false, writable: false }); } catch (_) {}
+            try { Object.defineProperty(document, 'webkitVisibilityState', { value: 'visible', writable: false }); } catch (_) {}
+            try { Object.defineProperty(document, 'webkitHidden', { value: false, writable: false }); } catch (_) {}
             document.addEventListener('visibilitychange', function(e) { e.stopImmediatePropagation(); }, true);
+
+            // Report playback state to the native PlaybackService so Android
+            // keeps the process alive while audio is playing in the background.
+            function reportPlaybackState() {
+                var playing = false;
+                try {
+                    document.querySelectorAll('video').forEach(function(v) {
+                        if (!v.paused && !v.ended && v.readyState > 0) playing = true;
+                    });
+                } catch (_) {}
+                try {
+                    if (window.FeroxBridge && window.FeroxBridge.onPlaybackState) {
+                        window.FeroxBridge.onPlaybackState(playing);
+                    }
+                } catch (_) {}
+            }
+            document.addEventListener('play', reportPlaybackState, true);
+            document.addEventListener('playing', reportPlaybackState, true);
+            document.addEventListener('pause', reportPlaybackState, true);
+            document.addEventListener('ended', reportPlaybackState, true);
+            setInterval(reportPlaybackState, 3000);
+            setTimeout(reportPlaybackState, 800);
+
+            // Block any later visibilitychange subscriptions (YouTube re-binds
+            // handlers on SPA navigation).
+            try {
+                var originalAddEventListener = EventTarget.prototype.addEventListener;
+                EventTarget.prototype.addEventListener = function(type) {
+                    if (type === 'visibilitychange' || type === 'webkitvisibilitychange') return;
+                    return originalAddEventListener.apply(this, arguments);
+                };
+            } catch (_) {}
 
             // 2. Speed setter used by the native Android controls (pills + bubble)
             window.feroxSetSpeed = function(rate) {

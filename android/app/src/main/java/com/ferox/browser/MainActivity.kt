@@ -1,12 +1,17 @@
 package com.ferox.browser
 
+import android.Manifest
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.Gravity
@@ -14,6 +19,7 @@ import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowManager
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.DecelerateInterpolator
 import android.view.inputmethod.EditorInfo
@@ -22,7 +28,11 @@ import android.webkit.*
 import android.widget.*
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.util.Locale
 import kotlin.math.abs
@@ -51,9 +61,21 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bubbleRipple2: View
     private lateinit var bubbleLabel: TextView
     private lateinit var textSpeedReadout: TextView
+    private lateinit var playerContainer: FrameLayout
+    private lateinit var miniTouchShield: View
+    private lateinit var btnCloseMini: ImageButton
+
+    /** Dedicated WebView for YouTube watch pages. Created lazily. */
+    private var playerWebView: WebView? = null
+    private var playerExpanded = false
+    private var playerMini = false
 
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
+
+    /** Playback state per source WebView ("browse" / "player"). */
+    private val playbackStates = mutableMapOf("browse" to false, "player" to false)
+    private var playbackServiceStarted = false
 
     private val shieldsEngine = ShieldsEngine()
     private val speedOptions = arrayOf(
@@ -86,16 +108,10 @@ class MainActivity : AppCompatActivity() {
         setupBubble()
         setupListeners()
 
-        // Handle Android Back Navigation inside WebView
+        // Handle Android Back Navigation: fullscreen -> player -> mini -> web history
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (customView != null) {
-                    hideFullscreenView()
-                } else if (webView.canGoBack()) {
-                    webView.goBack()
-                } else {
-                    finish()
-                }
+                handleBackNavigation()
             }
         })
 
@@ -124,6 +140,183 @@ class MainActivity : AppCompatActivity() {
         bubbleRipple2 = findViewById(R.id.bubbleRipple2)
         bubbleLabel = findViewById(R.id.bubbleLabel)
         textSpeedReadout = findViewById(R.id.textSpeedReadout)
+        playerContainer = findViewById(R.id.playerContainer)
+        miniTouchShield = findViewById(R.id.miniTouchShield)
+        btnCloseMini = findViewById(R.id.btnCloseMini)
+    }
+
+    // ==========================================
+    // Back navigation: fullscreen -> player -> mini -> history
+    // ==========================================
+    private fun handleBackNavigation() {
+        val player = playerWebView
+        if (customView != null) {
+            hideFullscreenView()
+            return
+        }
+        if (playerExpanded && player != null) {
+            // Back from the full watch page: minimize into the mini player and
+            // return to the feed exactly where the user left it.
+            if (isYouTubeWatchUrl(player.url)) {
+                minimizePlayer()
+            } else if (player.canGoBack()) {
+                player.goBack()
+            } else {
+                closePlayer()
+            }
+            return
+        }
+        if (playerMini) {
+            closePlayer()
+            return
+        }
+        if (webView.canGoBack()) {
+            webView.goBack()
+        } else {
+            finish()
+        }
+    }
+
+    // ==========================================
+    // Dedicated player WebView (full + mini player)
+    // ==========================================
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun ensurePlayerWebView(): WebView {
+        playerWebView?.let { return it }
+
+        val wv = WebView(this)
+        wv.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            databaseEnabled = true
+            mediaPlaybackRequiresUserGesture = false
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            userAgentString = webView.settings.userAgentString
+        }
+        wv.addJavascriptInterface(FeroxBridge("player"), "FeroxBridge")
+
+        wv.webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): WebResourceResponse? {
+                return shieldsEngine.shouldIntercept(request)
+                    ?: super.shouldInterceptRequest(view, request)
+            }
+
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                progressBar.visibility = View.VISIBLE
+                if (url != null && !urlEditText.hasFocus()) {
+                    urlEditText.setText(url)
+                }
+            }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                progressBar.visibility = View.GONE
+                shieldsEngine.injectCosmeticFilter(wv)
+                if (url != null && url.contains("youtube.com", ignoreCase = true)) {
+                    YouTubeSpeedEngine.inject(wv)
+                    pushSpeedTo(wv, currentSpeed, force = true)
+                    if (playerMini) wv.evaluateJavascript(MINI_CSS_JS, null)
+                }
+            }
+        }
+
+        wv.webChromeClient = object : WebChromeClient() {
+            override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                progressBar.progress = newProgress
+                if (newProgress == 100) progressBar.visibility = View.GONE
+            }
+
+            override fun onShowCustomView(view: View?, callback: WebChromeClient.CustomViewCallback?) {
+                showFullscreenView(view, callback)
+            }
+
+            override fun onHideCustomView() {
+                hideFullscreenView()
+            }
+        }
+
+        playerContainer.addView(
+            wv,
+            0,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
+        playerWebView = wv
+        return wv
+    }
+
+    private fun openPlayerInternal(url: String) {
+        val existing = playerWebView
+        if (existing != null && existing.url == url && (playerExpanded || playerMini)) {
+            if (!playerExpanded) expandPlayer()
+            return
+        }
+        val wv = ensurePlayerWebView()
+        wv.loadUrl(url)
+        expandPlayer()
+    }
+
+    private fun expandPlayer() {
+        val lp = playerContainer.layoutParams as FrameLayout.LayoutParams
+        lp.width = FrameLayout.LayoutParams.MATCH_PARENT
+        lp.height = FrameLayout.LayoutParams.MATCH_PARENT
+        lp.gravity = Gravity.TOP or Gravity.START
+        lp.setMargins(0, 0, 0, 0)
+        playerContainer.layoutParams = lp
+        playerContainer.visibility = View.VISIBLE
+        miniTouchShield.visibility = View.GONE
+        btnCloseMini.visibility = View.GONE
+        playerWebView?.evaluateJavascript(EXIT_MINI_CSS_JS, null)
+        playerExpanded = true
+        playerMini = false
+    }
+
+    private fun minimizePlayer() {
+        val density = resources.displayMetrics.density
+        val lp = playerContainer.layoutParams as FrameLayout.LayoutParams
+        lp.width = (208 * density).toInt()
+        lp.height = (117 * density).toInt()
+        lp.gravity = Gravity.BOTTOM or Gravity.END
+        lp.setMargins(0, 0, (8 * density).toInt(), (8 * density).toInt())
+        playerContainer.layoutParams = lp
+        playerContainer.visibility = View.VISIBLE
+        miniTouchShield.visibility = View.VISIBLE
+        btnCloseMini.visibility = View.VISIBLE
+        playerWebView?.evaluateJavascript(MINI_CSS_JS, null)
+        playerExpanded = false
+        playerMini = true
+    }
+
+    private fun closePlayer() {
+        val wv = playerWebView ?: return
+        playerContainer.removeView(wv)
+        wv.stopLoading()
+        wv.destroy()
+        playerWebView = null
+        playerExpanded = false
+        playerMini = false
+        playerContainer.visibility = View.GONE
+        playbackStates["player"] = false
+        updatePlaybackService()
+    }
+
+    private fun isYouTubeWatchUrl(url: String?): Boolean {
+        if (url.isNullOrEmpty()) return false
+        return try {
+            val uri = Uri.parse(url)
+            val host = uri.host?.lowercase() ?: return false
+            val path = uri.path ?: ""
+            (host == "youtube.com" || host.endsWith(".youtube.com")) && path == "/watch"
+        } catch (e: Exception) {
+            false
+        }
     }
 
     // ==========================================
@@ -338,12 +531,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun pushSpeedToWeb(speed: Float, force: Boolean = false) {
+        pushSpeedTo(webView, speed, force)
+    }
+
+    private fun pushSpeedTo(target: WebView, speed: Float, force: Boolean = false) {
         val now = SystemClock.uptimeMillis()
         if (!force && now - lastJsPushTime < 33L) return
         lastJsPushTime = now
 
         val value = String.format(Locale.US, "%.2f", speed)
-        webView.evaluateJavascript("if (window.feroxSetSpeed) window.feroxSetSpeed($value);", null)
+        target.evaluateJavascript("if (window.feroxSetSpeed) window.feroxSetSpeed($value);", null)
     }
 
     private fun formatSpeed(speed: Float): String {
@@ -373,6 +570,8 @@ class MainActivity : AppCompatActivity() {
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
 
+        webView.addJavascriptInterface(FeroxBridge("browse"), "FeroxBridge")
+
         shieldsEngine.setOnBlockedListener { count ->
             runOnUiThread {
                 textShieldsCount.text = count.toString()
@@ -385,6 +584,30 @@ class MainActivity : AppCompatActivity() {
                 request: WebResourceRequest?
             ): WebResourceResponse? {
                 return shieldsEngine.shouldIntercept(request) ?: super.shouldInterceptRequest(view, request)
+            }
+
+            override fun shouldOverrideUrlLoading(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): Boolean {
+                val url = request?.url?.toString()
+                if (request?.isForMainFrame == true && url != null && isYouTubeWatchUrl(url)) {
+                    // Watch pages always open in the dedicated player so the
+                    // feed in this WebView is never navigated away from.
+                    openPlayerInternal(url)
+                    return true
+                }
+                return false
+            }
+
+            @Deprecated("Deprecated in Java")
+            @Suppress("DEPRECATION")
+            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                if (url != null && isYouTubeWatchUrl(url)) {
+                    openPlayerInternal(url)
+                    return true
+                }
+                return false
             }
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -401,6 +624,7 @@ class MainActivity : AppCompatActivity() {
                 shieldsEngine.injectCosmeticFilter(webView)
                 if (url != null && url.contains("youtube.com", ignoreCase = true)) {
                     YouTubeSpeedEngine.inject(webView)
+                    webView.evaluateJavascript(WATCHDOG_JS, null)
                     pushSpeedToWeb(currentSpeed, force = true)
                 }
             }
@@ -414,12 +638,8 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
-                customView = view
-                customViewCallback = callback
-                fullscreenContainer.addView(view)
-                fullscreenContainer.visibility = View.VISIBLE
-                webView.visibility = View.GONE
+            override fun onShowCustomView(view: View?, callback: WebChromeClient.CustomViewCallback?) {
+                showFullscreenView(view, callback)
             }
 
             override fun onHideCustomView() {
@@ -428,14 +648,108 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ==========================================
+    // True fullscreen video
+    // ==========================================
+    private fun showFullscreenView(view: View?, callback: WebChromeClient.CustomViewCallback?) {
+        if (view == null) {
+            callback?.onCustomViewHidden()
+            return
+        }
+        if (customView != null) {
+            callback?.onCustomViewHidden()
+            return
+        }
+        customView = view
+        customViewCallback = callback
+        fullscreenContainer.addView(
+            view,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
+        fullscreenContainer.visibility = View.VISIBLE
+        enterImmersiveMode()
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
     private fun hideFullscreenView() {
         if (customView == null) return
         fullscreenContainer.removeView(customView)
         fullscreenContainer.visibility = View.GONE
-        webView.visibility = View.VISIBLE
         customViewCallback?.onCustomViewHidden()
         customView = null
         customViewCallback = null
+        exitImmersiveMode()
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    private fun enterImmersiveMode() {
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    private fun exitImmersiveMode() {
+        WindowCompat.getInsetsController(window, window.decorView)
+            .show(WindowInsetsCompat.Type.systemBars())
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && customView != null) enterImmersiveMode()
+    }
+
+    // ==========================================
+    // Background playback service + JS bridge
+    // ==========================================
+    private inner class FeroxBridge(private val source: String) {
+        @JavascriptInterface
+        fun onPlaybackState(playing: Boolean) {
+            runOnUiThread {
+                playbackStates[source] = playing
+                updatePlaybackService()
+            }
+        }
+
+        @JavascriptInterface
+        fun openPlayer(url: String?) {
+            if (url.isNullOrEmpty()) return
+            runOnUiThread { openPlayerInternal(url) }
+        }
+    }
+
+    private fun updatePlaybackService() {
+        val playing = playbackStates.values.any { it }
+        if (playing) {
+            if (!playbackServiceStarted) {
+                ensureNotificationPermission()
+                ContextCompat.startForegroundService(
+                    this,
+                    Intent(this, PlaybackService::class.java)
+                )
+                playbackServiceStarted = true
+            }
+        } else if (playbackServiceStarted) {
+            stopService(Intent(this, PlaybackService::class.java))
+            playbackServiceStarted = false
+        }
+    }
+
+    private fun ensureNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                1001
+            )
+        }
     }
 
     private fun setupListeners() {
@@ -454,10 +768,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        btnBack.setOnClickListener { if (webView.canGoBack()) webView.goBack() }
+        btnBack.setOnClickListener { handleBackNavigation() }
         btnForward.setOnClickListener { if (webView.canGoForward()) webView.goForward() }
-        btnRefresh.setOnClickListener { webView.reload() }
+        btnRefresh.setOnClickListener {
+            val target = if (playerExpanded) playerWebView else webView
+            target?.reload()
+        }
         btnHome.setOnClickListener { webView.loadUrl("https://search.brave.com") }
+
+        // Mini player interactions
+        miniTouchShield.setOnClickListener { expandPlayer() }
+        btnCloseMini.setOnClickListener { closePlayer() }
 
         // Shields Popup
         btnShields.setOnClickListener {
@@ -486,14 +807,23 @@ class MainActivity : AppCompatActivity() {
         } else {
             "https://search.brave.com/search?q=" + java.net.URLEncoder.encode(input, "UTF-8")
         }
-        webView.loadUrl(url)
+        if (isYouTubeWatchUrl(url)) {
+            openPlayerInternal(url)
+        } else {
+            // Browsing away from the watch page: keep the video alive as a mini
+            // player when possible, otherwise close it.
+            if (playerExpanded) {
+                if (isYouTubeWatchUrl(playerWebView?.url)) minimizePlayer() else closePlayer()
+            }
+            webView.loadUrl(url)
+        }
     }
 
     private fun showShieldsDialog() {
         val status = if (shieldsEngine.shieldsEnabled) "Active" else "Disabled"
         MaterialAlertDialogBuilder(this)
             .setTitle("🛡️ Brave Shields Protection")
-            .setMessage("Status: $status\n\nBlocked Trackers & Ads: ${shieldsEngine.blockedCount}\n\nFeatures:\n✓ YouTube Video Ads Blocked\n✓ Continuous 1x - 4x Speed Tuning\n✓ Drag-and-Hold Speed Bubble\n✓ Background Audio Playback\n✓ Top Speed Selection Bar")
+            .setMessage("Status: $status\n\nBlocked Trackers & Ads: ${shieldsEngine.blockedCount}\n\nFeatures:\n✓ YouTube Video Ads Blocked\n✓ Continuous 1x - 4x Speed Tuning\n✓ Drag-and-Hold Speed Bubble\n✓ Background Audio Playback\n✓ Top Speed Selection Bar\n✓ Mini Player & Fullscreen Video")
             .setPositiveButton(if (shieldsEngine.shieldsEnabled) "Turn Off" else "Turn On") { _, _ ->
                 shieldsEngine.shieldsEnabled = !shieldsEngine.shieldsEnabled
                 webView.reload()
@@ -512,7 +842,60 @@ class MainActivity : AppCompatActivity() {
         glowAnimator?.cancel()
         rippleAnimator1?.cancel()
         rippleAnimator2?.cancel()
+        playerWebView?.let {
+            playerContainer.removeView(it)
+            it.destroy()
+        }
+        playerWebView = null
+        stopService(Intent(this, PlaybackService::class.java))
+        playbackServiceStarted = false
         webView.destroy()
         super.onDestroy()
+    }
+
+    companion object {
+        /**
+         * Watches for YouTube SPA navigations that reach a watch page without
+         * a full page load. Those are moved into the dedicated player WebView
+         * and the browse WebView returns to the feed (SPA restore, no reload).
+         */
+        private val WATCHDOG_JS = """
+            (function(){
+              if (window.__feroxWatchDog) return; window.__feroxWatchDog = true;
+              var handled = '';
+              setInterval(function(){
+                try {
+                  var u = new URL(location.href);
+                  if (u.pathname === '/watch' && location.href !== handled &&
+                      window.FeroxBridge && window.FeroxBridge.openPlayer) {
+                    handled = location.href;
+                    window.FeroxBridge.openPlayer(location.href);
+                    history.back();
+                  }
+                } catch (e) {}
+              }, 400);
+            })();
+        """.trimIndent()
+
+        /** Hides the YouTube mobile top bar so the video fills the mini player. */
+        private val MINI_CSS_JS = """
+            (function(){
+              var id = 'ferox-mini-css';
+              if (!document.getElementById(id)) {
+                var s = document.createElement('style');
+                s.id = id;
+                s.textContent = 'ytm-mobile-topbar-renderer,.mobile-topbar,.ytm-mobile-topbar{display:none !important;} html,body{overflow:hidden !important;}';
+                (document.head || document.documentElement).appendChild(s);
+              }
+              try { window.scrollTo(0, 0); } catch (e) {}
+            })();
+        """.trimIndent()
+
+        private val EXIT_MINI_CSS_JS = """
+            (function(){
+              var s = document.getElementById('ferox-mini-css');
+              if (s) s.remove();
+            })();
+        """.trimIndent()
     }
 }
