@@ -1,0 +1,146 @@
+! Title: Ferox Shields - Built-in Baseline Filters
+! Description: Always-on baseline of high-value ad, tracker, popup and YouTube
+!              rules. Merged on top of the full Ghostery/uBO/EasyList engine so
+!              Ferox Shields keeps blocking even when remote lists cannot be
+!              refreshed (offline, blocked CDN, first run, cache corruption).
+! License: MPL-2.0
+
+! ============================================================
+! Core advertising networks, exchanges and ad servers
+! ============================================================
+||2mdn.net^
+||ad.doubleclick.net^
+||adnxs.com^
+||adsafeprotected.com^
+||adservice.google.com^
+||adsrvr.org^
+||advertising.com^
+||amazon-adsystem.com^
+||bidswitch.net^
+||casalemedia.com^
+||contextweb.com^
+||criteo.com^
+||criteo.net^
+||doubleclick.net^
+||flashtalking.com^
+||googleadservices.com^
+||googlesyndication.com^
+||googletagservices.com^
+||google-analytics.com^
+||googletagmanager.com^
+||innovid.com^
+||media.net^
+||moatads.com^
+||openx.net^
+||outbrain.com^
+||pubmatic.com^
+||quantserve.com^
+||rubiconproject.com^
+||scorecardresearch.com^
+||serving-sys.com^
+||smartadserver.com^
+||spotxchange.com^
+||taboola.com^
+||teads.tv^
+||yieldmo.com^
+||zedo.com^
+
+! ============================================================
+! Pop-up, pop-under, push-notification and interstitial networks
+! ============================================================
+||adcash.com^
+||ad-maven.com^
+||adsterra.com^
+||adf.ly^
+||clickadu.com^
+||exoclick.com^
+||foxpush.com^
+||hilltopads.net^
+||juicyads.com^
+||linkbucks.com^
+||mgid.com^
+||onclickads.net^
+||onclckads.net^
+||popads.net^
+||popcash.net^
+||popmyads.com^
+||propellerads.com^
+||propellerpops.com^
+||pushcrew.com^
+||pushengage.com^
+||revcontent.com^
+||shorte.st^
+||trafficjunky.net^
+||webpushr.com^
+||zergnet.com^
+
+! ============================================================
+! YouTube first-party ad endpoints (network layer)
+! ============================================================
+||youtube.com/api/stats/ads
+||youtube.com/pagead/
+||youtube.com/ptracking
+||youtube.com/get_midroll_info
+||youtube.com/youtubei/v1/player/ad_break
+||youtube.com/youtubei/v1/log_event?*ad=
+||youtubekids.com/api/stats/ads
+
+! ============================================================
+! YouTube ad containers, banners and anti-adblock enforcement UI
+! ============================================================
+youtube.com##.video-ads
+youtube.com##.ytp-ad-module
+youtube.com##.ytp-ad-overlay-container
+youtube.com##.ytp-ad-player-overlay
+youtube.com##.ytp-ad-player-overlay-layout
+youtube.com##.ytp-ad-image-overlay
+youtube.com##.ytp-ad-text-overlay
+youtube.com##.ytp-ad-text
+youtube.com##.ytp-ad-preview-container
+youtube.com##.ytp-ad-skip-button-container
+youtube.com##.ytp-ad-survey
+youtube.com##.ytp-ad-progress-list
+youtube.com##.ytp-suggested-action
+youtube.com##.ytp-featured-product
+youtube.com##ytd-ad-slot-renderer
+youtube.com##ytd-in-feed-ad-layout-renderer
+youtube.com##ytd-banner-promo-renderer
+youtube.com##ytd-banner-promo-renderer-background
+youtube.com##ytd-promoted-sparkles-web-renderer
+youtube.com##ytd-promoted-video-renderer
+youtube.com##ytd-display-ad-renderer
+youtube.com##ytd-statement-banner-renderer
+youtube.com##ytd-companion-slot-renderer
+youtube.com##ytd-action-companion-ad-renderer
+youtube.com##ytd-player-legacy-desktop-watch-ads-renderer
+youtube.com##ytd-merch-shelf-renderer
+youtube.com##ytm-promoted-sparkles-web-renderer
+youtube.com##ytd-rich-item-renderer:has(ytd-ad-slot-renderer)
+youtube.com##ytd-rich-section-renderer:has(ytd-statement-banner-renderer)
+youtube.com###masthead-ad
+youtube.com###player-ads
+youtube.com##ytd-enforcement-message-view-model
+youtube.com##tp-yt-paper-dialog:has(ytd-enforcement-message-view-model)
+youtube.com##tp-yt-paper-toast#toast:has(yt-button-renderer#action-button a[href*="blocker"])
+
+! ============================================================
+! Generic ad containers and ad iframes (conservative, high confidence)
+! ============================================================
+##ins.adsbygoogle
+##.adsbygoogle
+##[id^="google_ads_"]
+##[id^="div-gpt-ad"]
+##[id^="aswift_"]
+##[data-ad-slot]
+##[data-ad-client]
+##iframe[src*="doubleclick.net"]
+##iframe[src*="googlesyndication.com"]
+##iframe[name^="aswift_"]
+##iframe[title="Advertisement"]
+##iframe[title="advertisement"]
+##iframe[aria-label="Advertisement"]
+##.taboola
+##.outbrain
+##[class^="ad-slot-"]
+##[id^="taboola-"]
+##[id^="outbrain-"]

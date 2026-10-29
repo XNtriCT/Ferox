@@ -1,9 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg_primary">#121217</color>
-    <color name="bg_secondary">#1A1A24</color>
-    <color name="accent_orange">#FB542B</color>
-    <color name="accent_orange_dark">#D13E18</color>
-    <color name="text_primary">#FFFFFF</color>
-    <color name="text_secondary">#A0A0B8</color>
+    <!-- Cool navy surfaces (hue-shifted, never pure gray) -->
+    <color name="bg_primary">#0D1017</color>
+    <color name="bg_secondary">#131826</color>
+    <color name="bg_elevated">#171D2C</color>
+    <color name="bg_deep">#0E1119</color>
+
+    <!-- Brand oranges sampled from the Ferox logo -->
+    <color name="accent_orange">#F79A2E</color>
+    <color name="accent_orange_dark">#E8721C</color>
+    <color name="accent_bright">#FFC061</color>
+    <color name="accent_deep">#D96A12</color>
+
+    <!-- Text — cream from the logo's fur, cool-tinted secondaries -->
+    <color name="text_primary">#F2EDE4</color>
+    <color name="text_secondary">#A6AEBD</color>
+    <color name="text_muted">#6B7486</color>
+    <color name="text_on_accent">#1C1206</color>
+
+    <!-- Positive state -->
+    <color name="state_positive">#3DDC84</color>
 </resources>

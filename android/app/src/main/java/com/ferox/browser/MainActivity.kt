@@ -91,7 +91,9 @@ class MainActivity : AppCompatActivity() {
     private var appInBackground = false
     private var documentStartSupported = false
 
-    private val shieldsEngine = ShieldsEngine()
+    // Lazy: field initializers run before the Activity attaches its base
+    // context, and ShieldsEngine resolves applicationContext in its constructor.
+    private val shieldsEngine by lazy { ShieldsEngine(this) }
     private val speedOptions = arrayOf(
         0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f,
         2.25f, 2.5f, 2.75f, 3.0f, 3.5f, 4.0f
@@ -276,6 +278,7 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
+                shieldsEngine.setPageUrl(url)
                 progressBar.visibility = View.VISIBLE
                 if (url != null && !urlEditText.hasFocus()) {
                     urlEditText.setText(url)
@@ -486,7 +489,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateSpeedUi(speed: Float) {
-        btnSpeedPill.text = "⚡ ${formatSpeed(speed)}"
+        btnSpeedPill.text = formatSpeed(speed)
         bubbleLabel.text = formatSpeed(speed)
         fullscreenSpeedLabel.text = formatSpeed(speed)
         val progress = speedToProgress(speed)
@@ -511,7 +514,7 @@ class MainActivity : AppCompatActivity() {
             val child = speedButtonsContainer.getChildAt(i) as? TextView ?: continue
             if (child === nearest) {
                 child.setBackgroundResource(R.drawable.bg_speed_btn_active)
-                child.setTextColor(Color.WHITE)
+                child.setTextColor(ContextCompat.getColor(this, R.color.text_on_accent))
             } else {
                 child.setBackgroundResource(R.drawable.bg_speed_btn)
                 child.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
@@ -743,6 +746,7 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
+                shieldsEngine.setPageUrl(url)
                 progressBar.visibility = View.VISIBLE
                 if (url != null && !urlEditText.hasFocus()) {
                     urlEditText.setText(url)
@@ -875,6 +879,12 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun log(message: String?) {
             Log.i(TAG, "JS[$source]: $message")
+        }
+
+        /** Cosmetic filter CSS for the current host, from the real filter lists. */
+        @JavascriptInterface
+        fun getCosmeticCss(host: String?): String {
+            return shieldsEngine.cosmeticCssFor(host)
         }
 
         @JavascriptInterface

@@ -21,11 +21,30 @@
   // ==========================================
   // 1. YouTube Ad Auto-Skipper + Anti-Adblock Shield
   // ==========================================
+  // Real blocking happens upstream: Brave-style filter lists cancel ad
+  // network requests, and the document-start shield prunes `adPlacements`
+  // from every player payload. This module only handles the rare ad that
+  // still slips through: click Skip the moment YouTube offers it and remove
+  // ad surfaces — playback rate and seek position are never touched, so the
+  // handoff to the video stays seamless.
   let lastEnforcementAt = 0;
   let adModeActive = false;
   let adSkipTicker = null;
-  let adWasMuted = false;
-  let adWasPlaying = false;
+
+  // Brand bolt glyph built as SVG (Trusted Types safe, no emoji fonts).
+  function boltIcon(size) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('width', String(size));
+    svg.setAttribute('height', String(size));
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'currentColor');
+    svg.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', 'M13 2L4.5 13.5h5.75L9.5 22l8.75-11.75h-5.6L13 2z');
+    svg.appendChild(path);
+    return svg;
+  }
 
   const AD_SKIP_SELECTORS = [
     '.ytp-ad-skip-button',
@@ -79,33 +98,25 @@
   }
 
   /**
-   * Hard ad termination. Instead of letting an ad play (even sped up), the
-   * media element is repeatedly seeked to its very end until YouTube tears the
-   * ad down and starts the real video. The ticker is required because the ad
-   * module clamps seeks back during the first moments of an ad.
+   * Graceful stray-ad handling. The ad network request was already cancelled
+   * and the player payload already stripped of ad placements, so an ad here
+   * is a rare leftover overlay or a skippable break: activate Skip as soon
+   * as YouTube renders it and clear ad chrome from the page — without any
+   * playback-rate changes, muting, or forced seeks.
    */
-  function forceAdCompletion() {
-    document.querySelectorAll('video').forEach((v) => {
-      try {
-        v.playbackRate = 16.0; // fallback acceleration if a seek is rejected
-        v.muted = true;
-        if (Number.isFinite(v.duration) && v.duration > 0 && v.currentTime < v.duration - 0.05) {
-          v.currentTime = v.duration + 1; // clamps to duration and fires 'ended'
-        }
-      } catch (_) {}
-    });
+  function handleStrayAd() {
     clickAdSkipButtons();
     removeAdSurfaces();
+    resumePlaybackIfPaused();
   }
 
   function enterAdMode() {
     if (adModeActive) return;
     adModeActive = true;
-    const video = document.querySelector('video.html5-main-video') || document.querySelector('video');
-    adWasMuted = video ? !!video.muted : false;
-    adWasPlaying = video ? !video.paused : true;
-    forceAdCompletion();
-    if (!adSkipTicker) adSkipTicker = setInterval(forceAdCompletion, 40);
+    handleStrayAd();
+    // Clicks are idempotent; a modest cadence catches the Skip button right
+    // after YouTube's min-view timer without hammering the DOM.
+    if (!adSkipTicker) adSkipTicker = setInterval(handleStrayAd, 250);
   }
 
   function exitAdMode() {
@@ -115,29 +126,13 @@
       clearInterval(adSkipTicker);
       adSkipTicker = null;
     }
-    document.querySelectorAll('video').forEach((v) => {
-      try {
-        v.muted = adWasMuted;
-        v.playbackRate = currentSpeed;
-        v.defaultPlaybackRate = currentSpeed;
-        if ('preservesPitch' in v) v.preservesPitch = true;
-        if ('webkitPreservesPitch' in v) v.webkitPreservesPitch = true;
-      } catch (_) {}
-    });
-    if (adWasPlaying) {
-      const video = document.querySelector('video.html5-main-video') || document.querySelector('video');
-      if (video && video.paused) {
-        const attempt = video.play();
-        if (attempt && typeof attempt.catch === 'function') attempt.catch(() => {});
-      }
-    }
     updateAllIndicators(currentSpeed);
   }
 
   function monitorYouTubeAds() {
     if (isAdPlaying()) {
       if (!adModeActive) enterAdMode();
-      else forceAdCompletion();
+      else handleStrayAd();
     } else if (adModeActive) {
       exitAdMode();
     }
@@ -219,14 +214,14 @@
         left: 50%;
         transform: translate(-50%, -50%) scale(0.9);
         background: rgba(12, 12, 18, 0.94);
-        color: #ff5500;
+        color: #f79a2e;
         font-family: 'Segoe UI', Roboto, sans-serif;
         font-size: 32px;
         font-weight: 800;
         padding: 14px 36px;
         border-radius: 40px;
-        border: 2px solid #ff5500;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.85), 0 0 30px rgba(255, 85, 0, 0.6);
+        border: 2px solid #f79a2e;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.85), 0 0 30px rgba(247, 154, 46, 0.6);
         z-index: 2147483647;
         pointer-events: none;
         transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -241,8 +236,9 @@
     // Trusted Types safe: build nodes instead of assigning innerHTML.
     while (toast.firstChild) toast.removeChild(toast.firstChild);
     const toastIcon = document.createElement('span');
-    toastIcon.style.fontSize = '36px';
-    toastIcon.textContent = '🚀';
+    toastIcon.style.cssText =
+      'display:flex; align-items:center; color:#ffb04a; filter:drop-shadow(0 2px 6px rgba(232,114,28,0.5));';
+    toastIcon.appendChild(boltIcon(30));
     const toastLabel = document.createElement('span');
     toastLabel.textContent = `${rate.toFixed(2).replace(/\.00$/, '')}x SPEED`;
     toast.appendChild(toastIcon);
@@ -280,10 +276,10 @@
         align-items: center;
         background: rgba(14, 14, 22, 0.92);
         backdrop-filter: blur(10px);
-        border: 1.5px solid #ff5500;
+        border: 1.5px solid #f79a2e;
         border-radius: 20px;
         padding: 4px 12px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7), 0 0 10px rgba(255, 85, 0, 0.3);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7), 0 0 10px rgba(247, 154, 46, 0.3);
         cursor: pointer;
         user-select: none;
         transition: all 0.2s ease;
@@ -291,14 +287,14 @@
 
       // Trusted Types safe: build nodes instead of assigning innerHTML.
       const pillIcon = document.createElement('span');
-      pillIcon.style.cssText = 'font-size:13px; margin-right:5px;';
-      pillIcon.textContent = '⚡';
+      pillIcon.style.cssText = 'display:flex; align-items:center; margin-right:5px; color:#ffb04a;';
+      pillIcon.appendChild(boltIcon(13));
       const pillText = document.createElement('span');
       pillText.id = 'ferox-pill-text';
       pillText.style.cssText = "color:#ffffff; font-weight:800; font-size:13px; font-family:'Segoe UI', sans-serif;";
       pillText.textContent = '1.0x';
       const pillArrow = document.createElement('span');
-      pillArrow.style.cssText = 'color:#ff7733; font-size:10px; margin-left:6px; font-weight:600;';
+      pillArrow.style.cssText = 'color:#ffb04a; font-size:10px; margin-left:6px; font-weight:600;';
       pillArrow.textContent = '▼';
       pill.appendChild(pillIcon);
       pill.appendChild(pillText);
@@ -346,11 +342,11 @@
       label.style.cssText = 'display:flex; align-items:center; gap:3px; margin-right:4px; user-select:none;';
       // Trusted Types safe: build nodes instead of assigning innerHTML.
       const labelIcon = document.createElement('span');
-      labelIcon.style.cssText = 'font-size:12px; color:#ff5500;';
-      labelIcon.textContent = '⚡';
+      labelIcon.style.cssText = 'display:flex; align-items:center; color:#f79a2e;';
+      labelIcon.appendChild(boltIcon(12));
       const labelText = document.createElement('span');
       labelText.style.cssText =
-        "font-size:11px; font-weight:800; color:#ff6600; font-family:'Segoe UI', sans-serif; letter-spacing:0.5px;";
+        "font-size:11px; font-weight:800; color:#f79a2e; font-family:'Segoe UI', sans-serif; letter-spacing:0.5px;";
       labelText.textContent = 'SPEED:';
       label.appendChild(labelIcon);
       label.appendChild(document.createTextNode(' '));
@@ -387,7 +383,7 @@
           if (Math.abs(parseFloat(btn.dataset.speed) - currentSpeed) >= 0.05) {
             btn.style.background = 'rgba(45, 45, 65, 0.95)';
             btn.style.color = '#ffffff';
-            btn.style.borderColor = 'rgba(255, 85, 0, 0.45)';
+            btn.style.borderColor = 'rgba(247, 154, 46, 0.45)';
           }
         });
 
@@ -423,7 +419,7 @@
         gap: 4px;
         background: rgba(12, 12, 18, 0.94);
         backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 85, 0, 0.4);
+        border: 1px solid rgba(247, 154, 46, 0.4);
         border-radius: 8px;
         padding: 4px 8px;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
@@ -443,7 +439,7 @@
         padding: 5px 10px;
         background: rgba(16, 16, 24, 0.95);
         backdrop-filter: blur(8px);
-        border: 1px solid rgba(255, 85, 0, 0.28);
+        border: 1px solid rgba(247, 154, 46, 0.28);
         border-radius: 8px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
         z-index: 1000;
@@ -494,13 +490,13 @@
       z-index: 2147483647;
       background: rgba(14, 14, 22, 0.96);
       backdrop-filter: blur(12px);
-      border: 1px solid #ff5500;
+      border: 1px solid #f79a2e;
       border-radius: 10px;
       padding: 8px;
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 6px;
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.9), 0 0 15px rgba(255, 85, 0, 0.4);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.9), 0 0 15px rgba(247, 154, 46, 0.4);
       width: 220px;
     `;
 
@@ -509,10 +505,15 @@
       btn.textContent = `${spd}x`;
       const isActive = Math.abs(spd - currentSpeed) < 0.05;
       btn.style.cssText = `
-        background: ${isActive ? '#ff5500' : 'rgba(30, 30, 44, 0.9)'};
-        color: ${isActive ? '#ffffff' : '#e0e0e0'};
+        background: ${isActive
+          ? 'linear-gradient(180deg, #ffc061 0%, #f79a2e 50%, #e8791b 100%)'
+          : 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(30,30,44,0.9) 100%)'};
+        color: ${isActive ? '#1c1206' : '#e0e0e0'};
         font-weight: ${isActive ? '800' : '600'};
-        border: 1px solid ${isActive ? '#ff5500' : 'rgba(255, 255, 255, 0.1)'};
+        border: 1px solid ${isActive ? '#ffc061' : 'rgba(255, 255, 255, 0.1)'};
+        box-shadow: ${isActive
+          ? 'inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 12px rgba(232,114,28,0.4)'
+          : 'inset 0 1px 0 rgba(255,255,255,0.06)'};
         border-radius: 6px;
         padding: 6px 0;
         font-size: 12px;
@@ -558,7 +559,7 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        color: #ff5500;
+        color: #f79a2e;
         font-weight: 800;
         font-size: 12px;
         padding: 0 8px;
@@ -613,8 +614,8 @@
     if (bottomBadge) {
       while (bottomBadge.firstChild) bottomBadge.removeChild(bottomBadge.firstChild);
       const badgeIcon = document.createElement('span');
-      badgeIcon.style.cssText = 'color:#ff5500; font-size:11px; margin-right:2px;';
-      badgeIcon.textContent = '⚡';
+      badgeIcon.style.cssText = 'display:inline-flex; align-items:center; color:#ffb04a; margin-right:3px;';
+      badgeIcon.appendChild(boltIcon(11));
       bottomBadge.appendChild(badgeIcon);
       bottomBadge.appendChild(document.createTextNode(rateText));
     }
@@ -623,10 +624,11 @@
     document.querySelectorAll('.ferox-speed-select-btn').forEach((btn) => {
       const sp = parseFloat(btn.dataset.speed);
       if (Math.abs(sp - rate) < 0.05) {
-        btn.style.background = '#ff5500';
-        btn.style.color = '#ffffff';
-        btn.style.borderColor = '#ff7733';
-        btn.style.boxShadow = '0 0 8px rgba(255, 85, 0, 0.6)';
+        btn.style.background = 'linear-gradient(180deg, #ffc061 0%, #f79a2e 50%, #e8791b 100%)';
+        btn.style.color = '#1c1206';
+        btn.style.borderColor = '#ffc061';
+        btn.style.boxShadow =
+          'inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 12px rgba(232,114,28,0.45)';
         btn.style.fontWeight = '800';
       } else {
         btn.style.background = 'rgba(26, 26, 38, 0.85)';
@@ -748,10 +750,10 @@
         gap: 10px;
         background: rgba(12, 12, 18, 0.94);
         backdrop-filter: blur(10px);
-        border: 1.5px solid #ff5500;
+        border: 1.5px solid #f79a2e;
         border-radius: 24px;
         padding: 7px 18px;
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 85, 0, 0.45);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(247, 154, 46, 0.45);
         font-family: 'Segoe UI', Roboto, sans-serif;
         user-select: none;
         pointer-events: none;
@@ -767,7 +769,7 @@
       hudTitle.textContent = 'Mouse Speed';
       const hudValue = document.createElement('span');
       hudValue.className = 'ferox-mouse-value';
-      hudValue.style.cssText = 'color:#ff7733; font-weight:800; font-size:16px; min-width:54px; text-align:center;';
+      hudValue.style.cssText = 'color:#ffb04a; font-weight:800; font-size:16px; min-width:54px; text-align:center;';
       hudValue.textContent = '1x';
       const hudHint = document.createElement('span');
       hudHint.style.cssText = 'color:#8a8aa0; font-size:10.5px; font-weight:600;';

@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Speed bubble core: brand radial gradient with a warm rim light. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="oval">
     <gradient
         android:type="radial"
         android:gradientRadius="28dp"
-        android:startColor="#FFA24D"
-        android:centerColor="#FB542B"
-        android:endColor="#C93A12" />
+        android:startColor="#FFD489"
+        android:centerColor="#F79A2E"
+        android:endColor="#D96A12" />
     <stroke
         android:width="1dp"
-        android:color="#FFD0A0" />
+        android:color="#FFE9C4" />
 </shape>

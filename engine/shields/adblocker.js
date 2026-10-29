@@ -1,19 +1,22 @@
 /**
- * Ferox Browser - Brave Shields Ad & Tracker Blocker Engine
+ * Ferox Browser — Brave Shields engine (adblock-rust)
  *
- * Multi-layer protection:
- *   1. Full Ghostery / uBO / EasyList / EasyPrivacy filter engine, loaded from
- *      prebuilt lists and cached on disk (with a built-in baseline fallback so
- *      blocking never silently disappears when the network is unavailable).
- *   2. Network blocking via a single `onBeforeRequest` listener.  NOTE:
- *      Electron supports only one listener per webRequest event, so this engine
- *      owns the listener.  The previous implementation registered a second one
- *      and it was silently replaced, which disabled most of the blocking.
- *   3. CSP injection via `onHeadersReceived`.
- *   4. Cosmetic filtering (CSS + uBO scriptlets) injected at document-start by
- *      `page_preload.js` (wired in main.js through `will-attach-webview`), plus
- *      dom-ready / SPA-navigation top-ups for pages that load without it.
- *   5. Live per-site blocked counters streamed to the shields UI.
+ * Runs the exact engine that powers Brave Shields: `adblock-rust`, Brave's
+ * official npm binding (github.com/brave/adblock-rust). Filter lists are
+ * loaded from Brave's own list catalog (brave/adblock-resources,
+ * filter_lists/list_catalog.json — the same default-enabled desktop set
+ * Brave ships) plus Brave's resource library for scriptlet/redirect rules.
+ *
+ * Layers:
+ *   1. Network blocking via a single `onBeforeRequest` listener.
+ *      NOTE: Electron supports only one listener per webRequest event, so
+ *      this engine owns it.
+ *   2. Cosmetic filtering (CSS hide selectors + scriptlet injections)
+ *      delivered at document-start to `page_preload.js` over sync IPC, with
+ *      dom-ready / SPA-navigation top-ups for frames that miss the preload.
+ *   3. Live per-site blocked counters streamed to the shields UI.
+ *   4. Serialized engine cache for instant startup; bundled baseline
+ *      filters so blocking never silently disappears offline.
  *
  * No dependency on `session.registerPreloadScript` (Electron >= 35 only), so
  * this works on the Electron 33 runtime this app ships with.
@@ -25,29 +28,57 @@ const path = require('path');
 const fs = require('fs');
 const { app, ipcMain, webContents } = require('electron');
 const fetch = require('cross-fetch');
-const { ElectronBlocker, fromElectronDetails } = require('@ghostery/adblocker-electron');
+const adblockRust = require('adblock-rs');
 
 const BASELINE_FILTERS_PATH = path.join(__dirname, 'baseline_filters.txt');
 
-// Bump whenever baseline_filters.txt or the engine config changes so stale
-// caches are rebuilt automatically.
-const CACHE_VERSION = 2;
+// Bump whenever the baseline file or engine config changes so stale caches
+// are rebuilt automatically.
+const CACHE_VERSION = 3;
 
-const ENGINE_CONFIG = {
-  loadNetworkFilters: true,
-  loadCosmeticFilters: true,
-  loadCSPFilters: true,
-  loadExceptionFilters: true,
-  loadGenericCosmeticsFilters: true,
-  loadExtendedSelectors: false,
-  enableMutationObserver: false,
-  enableHtmlFiltering: false,
-  guessRequestTypeFromUrl: true,
-  enableCompression: false
-};
+// Brave's canonical catalog (brave/adblock-resources). On load we enable the
+// same default-enabled desktop lists Brave ships.
+const CATALOG_URL =
+  'https://raw.githubusercontent.com/brave/adblock-resources/master/filter_lists/list_catalog.json';
 
-// Cosmetic fallback CSS. The filter engine injects far more precise rules; this
-// list guarantees the most common ad shells stay hidden even if cosmetic
+// Brave's compiled resource library (scriptlet + redirect resources used by
+// `##+js()` and `$redirect=` rules).
+const RESOURCES_URL =
+  'https://raw.githubusercontent.com/brave/adblock-resources/master/dist/resources.json';
+
+// Direct list URLs used when the catalog itself cannot be fetched — the
+// exact sources Brave's default desktop catalog resolves to.
+const FALLBACK_LIST_URLS = [
+  'https://easylist.to/easylist/easylist.txt',
+  'https://easylist.to/easylist/easyprivacy.txt',
+  'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt',
+  'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2026.txt',
+  'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-general.txt',
+  'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/badware.txt',
+  'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/resource-abuse.txt',
+  'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt',
+  'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt',
+  'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/ubo-link-shorteners.txt',
+  'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt',
+  'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/annoyances-cookies.txt',
+  'https://raw.githubusercontent.com/brave/adblock-lists/master/brave-unbreak.txt',
+  'https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-specific.txt',
+  'https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-social.txt',
+  'https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-unbreak.txt',
+  'https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-android-specific.txt',
+  'https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-sugarcoat.txt',
+  'https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-firstparty.txt',
+  'https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-firstparty-regional.txt',
+  'https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-cookie-specific.txt',
+  'https://secure.fanboy.co.nz/fanboy-cookiemonster_ubo.txt',
+  'https://secure.fanboy.co.nz/fanboy-mobile-notifications.txt',
+  'https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-agh-online.txt'
+];
+
+const DESKTOP_PLATFORMS = new Set(['LINUX', 'WINDOWS', 'MAC']);
+
+// Cosmetic fallback CSS. The engine injects far more precise rules; this
+// guarantees the most common ad shells stay hidden even if cosmetic
 // injection is delayed or unavailable.
 const COSMETIC_AD_BLOCK_CSS = `
   /* YouTube ad elements */
@@ -112,20 +143,25 @@ const COSMETIC_AD_BLOCK_CSS = `
   }
 `;
 
-// Resolve a public-suffix-aware domain so cosmetic `domain##rule` filters work.
-let tldParse = null;
-try {
-  tldParse = require('tldts-experimental').parse;
-} catch (_) {
-  try {
-    const adblockerPackage = require.resolve('@ghostery/adblocker-electron/package.json');
-    const tldtsPackageDir = path.dirname(
-      require.resolve('tldts-experimental', { paths: [path.dirname(adblockerPackage)] })
-    );
-    tldParse = require(tldtsPackageDir).parse;
-  } catch (__) {
-    tldParse = null;
-  }
+// Electron resourceType -> adblock-rust request type.
+const RESOURCE_TYPE_MAP = {
+  mainFrame: 'document',
+  subFrame: 'subdocument',
+  stylesheet: 'stylesheet',
+  script: 'script',
+  image: 'image',
+  font: 'font',
+  object: 'object',
+  xmlhttprequest: 'xmlhttprequest',
+  ping: 'ping',
+  cspReport: 'other',
+  media: 'media',
+  webSocket: 'websocket',
+  other: 'other'
+};
+
+function mapResourceType(electronType) {
+  return RESOURCE_TYPE_MAP[electronType] || 'other';
 }
 
 let baselineFiltersCache = null;
@@ -138,6 +174,23 @@ function readBaselineFilters() {
     }
   }
   return baselineFiltersCache;
+}
+
+async function fetchText(url, timeoutMs = 20000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchJson(url, timeoutMs = 20000) {
+  const text = await fetchText(url, timeoutMs);
+  return JSON.parse(text);
 }
 
 class BraveShieldsEngine {
@@ -157,6 +210,7 @@ class BraveShieldsEngine {
     this.lastNotifyAt = 0;
     this.notifyTimer = null;
     this.ruleCount = 0;
+    this.resources = null;
   }
 
   /* --------------------------------------------------------------------- *
@@ -164,66 +218,130 @@ class BraveShieldsEngine {
    * --------------------------------------------------------------------- */
 
   async initialize(targetSession, options = {}) {
-    console.log('[Ferox Shields] Initializing ad and tracker blocker...');
+    console.log('[Ferox Shields] Initializing Brave adblock-rust engine...');
     this.session = targetSession || null;
 
+    try {
+      this.resources = await this.loadResources();
+    } catch (err) {
+      console.warn(`[Ferox Shields] Resource library unavailable: ${err.message}`);
+      this.resources = null;
+    }
+
     if (options.offline) {
-      this.engine = ElectronBlocker.parse(readBaselineFilters(), ENGINE_CONFIG);
+      this.engine = this.buildEngine(readBaselineFilters());
     } else {
       this.engine = await this.loadEngine();
     }
 
-    try {
-      const filters = this.engine.getFilters();
-      this.ruleCount = filters.networkFilters.length + filters.cosmeticFilters.length;
-    } catch (_) {
-      this.ruleCount = 0;
-    }
+    this.applyResources();
 
     if (this.session) this.attachNetworkBlocking(this.session);
     this.registerCosmeticIpc();
 
     console.log(
-      `[Ferox Shields] Engine ready with ${this.ruleCount} filters (+ baseline merge). Network blocking active.`
+      `[Ferox Shields] Brave engine ready (~${this.ruleCount} rules). Network blocking active.`
     );
+  }
+
+  buildEngine(filterText) {
+    const set = new adblockRust.FilterSet(false);
+    if (filterText) set.addFilters(filterText);
+    const engine = new adblockRust.Engine(set);
+    this.ruleCount = String(filterText || '')
+      .split('\n')
+      .filter((line) => line && !line.startsWith('!') && !line.startsWith('[')).length;
+    return engine;
+  }
+
+  applyResources() {
+    if (!this.engine || !Array.isArray(this.resources) || this.resources.length === 0) return;
+    try {
+      this.engine.useResources(this.resources);
+    } catch (err) {
+      console.warn(`[Ferox Shields] Resources rejected: ${err.message}`);
+    }
+  }
+
+  async loadResources() {
+    const cachePath = path.join(app.getPath('userData'), `shields-resources-v${CACHE_VERSION}.json`);
+    try {
+      const raw = await fs.promises.readFile(cachePath, 'utf8');
+      const cached = JSON.parse(raw);
+      if (Array.isArray(cached) && cached.length > 0) return cached;
+    } catch (_) {
+      /* stale or missing — refetch */
+    }
+    const resources = await fetchJson(RESOURCES_URL, 20000);
+    if (!Array.isArray(resources) || resources.length === 0) {
+      throw new Error('empty resource library');
+    }
+    fs.promises
+      .writeFile(cachePath, JSON.stringify(resources), 'utf8')
+      .catch(() => {});
+    return resources;
+  }
+
+  /** Resolve Brave's default-enabled desktop list sources from the catalog. */
+  async resolveListUrls() {
+    try {
+      const catalog = await fetchJson(CATALOG_URL, 20000);
+      const sources = catalog
+        .filter((entry) => {
+          if (!entry.default_enabled) return false;
+          const platforms = entry.platforms || [];
+          return platforms.length === 0 || platforms.some((p) => DESKTOP_PLATFORMS.has(p));
+        })
+        .flatMap((entry) => (entry.sources || []).map((s) => s.url))
+        .filter((url) => typeof url === 'string' && url.startsWith('https://'));
+      if (sources.length > 0) return sources;
+      throw new Error('catalog yielded no sources');
+    } catch (err) {
+      console.warn(`[Ferox Shields] Catalog unavailable (${err.message}); using pinned Brave lists.`);
+      return FALLBACK_LIST_URLS;
+    }
   }
 
   async loadEngine() {
     const cachePath = path.join(app.getPath('userData'), `shields-engine-v${CACHE_VERSION}.bin`);
 
-    // 1. Fast path: deserialize the cached engine built by a previous run.
+    // 1. Fast path: deserialize the engine built by a previous run.
     try {
       const buffer = await fs.promises.readFile(cachePath);
-      const engine = ElectronBlocker.deserialize(buffer);
-      console.log('[Ferox Shields] Filter engine restored from disk cache.');
+      const engine = new adblockRust.Engine(new adblockRust.FilterSet(false));
+      engine.deserialize(buffer);
+      this.ruleCount = -1;
+      console.log('[Ferox Shields] Brave engine restored from disk cache.');
       return engine;
     } catch (_) {
       /* cache missing or incompatible - rebuild below */
     }
 
-    // 2. Download the prebuilt lists and merge the built-in baseline on top.
+    // 2. Download Brave's default lists and compile them into the engine.
     try {
-      const { adsAndTrackingLists, fetchLists, fetchResources } = require('@ghostery/adblocker-electron');
-      const lists = await fetchLists(fetch, adsAndTrackingLists);
-      const engine = ElectronBlocker.parse(
-        lists.join('\n') + '\n' + readBaselineFilters(),
-        ENGINE_CONFIG
-      );
+      const urls = await this.resolveListUrls();
+      const results = await Promise.allSettled(urls.map((url) => fetchText(url)));
+      const texts = results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
+      if (texts.length === 0) throw new Error('no filter lists could be downloaded');
+
+      const combined = texts.join('\n') + '\n' + readBaselineFilters();
+      const engine = this.buildEngine(combined);
+
       try {
-        const resources = await fetchResources(fetch);
-        if (resources) engine.updateResources(resources, String(resources.length));
+        await fs.promises.writeFile(cachePath, Buffer.from(engine.serialize()));
       } catch (_) {
-        /* scriptlets/resources are optional; network + CSS rules still work */
+        /* cache write is best-effort */
       }
-      fs.promises.writeFile(cachePath, Buffer.from(engine.serialize())).catch(() => {});
-      console.log('[Ferox Shields] Fresh filter engine downloaded and compiled.');
+      console.log(
+        `[Ferox Shields] Compiled ${texts.length}/${urls.length} Brave filter lists into the engine.`
+      );
       return engine;
     } catch (err) {
       // 3. Last resort: built-in baseline so shields are never fully disabled.
       console.warn(
         `[Ferox Shields] Remote filter lists unavailable (${err.message}). Using built-in baseline filters.`
       );
-      return ElectronBlocker.parse(readBaselineFilters(), ENGINE_CONFIG);
+      return this.buildEngine(readBaselineFilters());
     }
   }
 
@@ -238,9 +356,6 @@ class BraveShieldsEngine {
     targetSession.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (details, callback) => {
       this.handleBeforeRequest(details, callback);
     });
-    targetSession.webRequest.onHeadersReceived({ urls: ['<all_urls>'] }, (details, callback) => {
-      this.handleHeadersReceived(details, callback);
-    });
     console.log('[Ferox Shields] Native network interceptor active.');
   }
 
@@ -249,7 +364,6 @@ class BraveShieldsEngine {
     // Electron supports a single listener per event; removing ours also clears
     // nothing else because this engine is the only registrar.
     this.session.webRequest.onBeforeRequest(null);
-    this.session.webRequest.onHeadersReceived(null);
     this.networkAttached = false;
   }
 
@@ -259,22 +373,28 @@ class BraveShieldsEngine {
       return;
     }
     try {
-      const request = fromElectronDetails(details);
-      if (ENGINE_CONFIG.guessRequestTypeFromUrl && request.type === 'other') {
-        request.guessTypeOfRequest();
-      }
-      if (request.isMainFrame()) {
+      // Top-level navigations are never blocked by the filter engine —
+      // same policy as Brave Shields.
+      if (details.resourceType === 'mainFrame') {
         callback({});
         return;
       }
-      const { redirect, match } = this.engine.match(request);
-      if (redirect && redirect.dataUrl) {
-        this.recordBlocked(details, request);
-        callback({ redirectURL: redirect.dataUrl });
-        return;
-      }
-      if (match) {
-        this.recordBlocked(details, request);
+
+      const sourceUrl =
+        details.referrer && /^https?:/i.test(details.referrer)
+          ? details.referrer
+          : details.url;
+
+      const blocked = this.engine.check(
+        details.url,
+        sourceUrl,
+        mapResourceType(details.resourceType),
+        details.method ? String(details.method).toLowerCase() : '',
+        false
+      );
+
+      if (blocked) {
+        this.recordBlocked(details, sourceUrl);
         callback({ cancel: true });
         return;
       }
@@ -284,50 +404,26 @@ class BraveShieldsEngine {
     callback({});
   }
 
-  handleHeadersReceived(details, callback) {
-    if (!this.shieldsEnabled || !this.engine) {
-      callback({});
-      return;
-    }
-    try {
-      if (details.resourceType !== 'mainFrame' && details.resourceType !== 'subFrame') {
-        callback({});
-        return;
-      }
-      const csp = this.engine.getCSPDirectives(fromElectronDetails(details));
-      if (csp !== undefined) {
-        const policies = [];
-        const responseHeaders = details.responseHeaders || {};
-        policies.push(...csp.split(';').map((directive) => directive.trim()));
-        for (const [name, values] of Object.entries(responseHeaders)) {
-          if (name.toLowerCase() === 'content-security-policy') {
-            policies.push(...values);
-            delete responseHeaders[name];
-          }
-        }
-        responseHeaders['content-security-policy'] = [policies.join(';')];
-        callback({ responseHeaders });
-        return;
-      }
-    } catch (_) {
-      /* fall through */
-    }
-    callback({});
-  }
-
   /* --------------------------------------------------------------------- *
    * Blocked stats
    * --------------------------------------------------------------------- */
 
-  recordBlocked(details, request) {
+  recordBlocked(details, sourceUrl) {
     this.blockedCount++;
 
-    let siteHost = request.sourceHostname || request.hostname || '';
-    const pageUrl = details && details.webContentsId ? this.pageUrls.get(details.webContentsId) : null;
-    if (pageUrl) {
-      try {
-        siteHost = new URL(pageUrl).hostname;
-      } catch (_) {}
+    let siteHost = '';
+    try {
+      siteHost = new URL(sourceUrl).hostname;
+    } catch (_) {
+      siteHost = '';
+    }
+    if (!siteHost && details && details.webContentsId) {
+      const pageUrl = this.pageUrls.get(details.webContentsId);
+      if (pageUrl) {
+        try {
+          siteHost = new URL(pageUrl).hostname;
+        } catch (_) {}
+      }
     }
     if (siteHost) {
       this.siteStats.set(siteHost, (this.siteStats.get(siteHost) || 0) + 1);
@@ -399,51 +495,50 @@ class BraveShieldsEngine {
     if (cached) return cached;
 
     let hostname = '';
-    let domain = null;
     try {
-      const parsed = new URL(url);
-      hostname = parsed.hostname;
-      if (tldParse) {
-        const tld = tldParse(url, { allowPrivateDomains: true });
-        domain = tld.domain || hostname;
-      } else {
-        const parts = hostname.split('.');
-        domain = parts.length > 2 ? parts.slice(-2).join('.') : hostname;
-      }
+      hostname = new URL(url).hostname;
     } catch (_) {
       return empty;
     }
 
     let message;
     try {
-      message = this.engine.getCosmeticsFilters({
-        url,
-        hostname,
-        domain,
-        getBaseRules: true,
-        getInjectionRules: true,
-        getExtendedRules: false,
-        getRulesFromHostname: true,
-        getRulesFromDOM: false
-      });
+      message = this.engine.urlCosmeticResources(url);
     } catch (_) {
       return empty;
     }
 
-    // Never inject the raw filter-list scriptlet batch on YouTube: those
-    // snippets are not designed to be executed together in one page world
-    // (duplicate global bindings / Trusted Types conflicts) and they break
-    // YouTube's player boot. Ferox's own document-start YouTube shield in
-    // page_preload.js performs the equivalent (and stronger) ad pruning.
+    const hide = Array.isArray(message.hide_selectors) ? message.hide_selectors : [];
+    const exceptions = Array.isArray(message.exceptions) ? message.exceptions : [];
+    const exceptionSet = new Set(exceptions);
+    const selectors = hide.filter((selector) => !exceptionSet.has(selector));
+
+    let styles = '';
+    if (selectors.length > 0) {
+      styles =
+        selectors.join(', ') +
+        '{display:none !important;visibility:hidden !important;opacity:0 !important;pointer-events:none !important;}';
+    }
+
+    // Never inject the raw scriptlet batch on YouTube: those snippets are not
+    // designed to be executed together in one page world (duplicate global
+    // bindings / Trusted Types conflicts) and they break YouTube's player
+    // boot. Ferox's own document-start YouTube shield in page_preload.js
+    // performs the equivalent (and stronger) ad pruning.
     const isYouTubeFamily =
       /(^|\.)youtube\.com$/i.test(hostname) ||
       /(^|\.)youtube-nocookie\.com$/i.test(hostname) ||
       /(^|\.)youtubekids\.com$/i.test(hostname);
 
+    const injected =
+      typeof message.injected_script === 'string' && message.injected_script.trim()
+        ? message.injected_script
+        : '';
+
     const result = {
-      active: message.active !== false,
-      styles: message.styles || '',
-      scripts: isYouTubeFamily ? [] : Array.isArray(message.scripts) ? message.scripts : []
+      active: selectors.length > 0 || (!!injected && !isYouTubeFamily),
+      styles,
+      scripts: !isYouTubeFamily && injected ? [injected] : []
     };
 
     if (this.cosmeticCache.size >= 500) this.cosmeticCache.clear();

@@ -4,7 +4,7 @@
     android:id="@+id/rootLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#121217"
+    android:background="@color/bg_primary"
     tools:context=".MainActivity">
 
     <LinearLayout
@@ -19,7 +19,7 @@
             android:layout_height="56dp"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:background="#1A1A24"
+            android:background="@color/bg_secondary"
             android:paddingStart="8dp"
             android:paddingEnd="8dp">
 
@@ -48,7 +48,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="0"
-                    android:textColor="#FB542B"
+                    android:textColor="@color/accent_orange"
                     android:textStyle="bold"
                     android:textSize="12sp"
                     android:layout_marginStart="4dp" />
@@ -62,8 +62,8 @@
                 android:layout_weight="1"
                 android:background="@drawable/bg_omnibox"
                 android:hint="Search or type URL"
-                android:textColorHint="#6B6B80"
-                android:textColor="#FFFFFF"
+                android:textColorHint="@color/text_muted"
+                android:textColor="@color/text_primary"
                 android:textSize="13sp"
                 android:singleLine="true"
                 android:imeOptions="actionGo"
@@ -78,8 +78,10 @@
                 android:layout_height="32dp"
                 android:background="@drawable/bg_speed_pill"
                 android:gravity="center"
-                android:text="⚡ 1x"
-                android:textColor="#FB542B"
+                android:text="1x"
+                android:drawableStart="@drawable/ic_bolt"
+                android:drawablePadding="4dp"
+                android:textColor="@color/accent_orange"
                 android:textStyle="bold"
                 android:textSize="11sp"
                 android:paddingStart="8dp"
@@ -96,7 +98,7 @@
             android:layout_width="match_parent"
             android:layout_height="3dp"
             android:max="100"
-            android:progressTint="#FB542B"
+            android:progressTint="@color/accent_orange"
             android:visibility="gone" />
 
         <!-- Speed Selection Bar: directly below the URL space, like the web app -->
@@ -104,7 +106,7 @@
             android:id="@+id/speedBarScroll"
             android:layout_width="match_parent"
             android:layout_height="34dp"
-            android:background="#161622"
+            android:background="@color/bg_primary"
             android:scrollbars="none"
             android:fillViewport="true">
 
@@ -184,7 +186,7 @@
             android:layout_width="match_parent"
             android:layout_height="54dp"
             android:orientation="horizontal"
-            android:background="#12121A"
+            android:background="@color/bg_deep"
             android:gravity="center_vertical">
 
             <ImageButton
@@ -195,8 +197,8 @@
                 android:padding="9dp"
                 android:scaleType="fitCenter"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_media_previous"
-                android:tint="#A0A0B8"
+                android:src="@drawable/ic_nav_back"
+                android:tint="@color/text_secondary"
                 android:contentDescription="Back" />
 
             <ImageButton
@@ -207,8 +209,8 @@
                 android:padding="9dp"
                 android:scaleType="fitCenter"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_media_next"
-                android:tint="#A0A0B8"
+                android:src="@drawable/ic_nav_forward"
+                android:tint="@color/text_secondary"
                 android:contentDescription="Forward" />
 
             <!-- Center gap reserved for the draggable speed bubble -->
@@ -225,8 +227,8 @@
                 android:padding="9dp"
                 android:scaleType="fitCenter"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_menu_today"
-                android:tint="#FB542B"
+                android:src="@drawable/ic_nav_search"
+                android:tint="@color/accent_orange"
                 android:contentDescription="Brave Search" />
 
             <ImageButton
@@ -237,8 +239,8 @@
                 android:padding="9dp"
                 android:scaleType="fitCenter"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_menu_rotate"
-                android:tint="#A0A0B8"
+                android:src="@drawable/ic_nav_refresh"
+                android:tint="@color/text_secondary"
                 android:contentDescription="Reload" />
         </LinearLayout>
 
@@ -284,7 +286,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:text="1x"
-            android:textColor="#FFFFFF"
+            android:textColor="@color/text_on_accent"
             android:textStyle="bold"
             android:textSize="10sp"
             android:fontFamily="sans-serif-medium"
@@ -304,7 +306,7 @@
         android:paddingTop="8dp"
         android:paddingBottom="8dp"
         android:text="1x"
-        android:textColor="#FB542B"
+        android:textColor="@color/accent_orange"
         android:textStyle="bold"
         android:textSize="26sp"
         android:fontFamily="sans-serif-medium"
@@ -336,7 +338,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="1x"
-                android:textColor="#FB542B"
+                android:textColor="@color/accent_orange"
                 android:textStyle="bold"
                 android:textSize="13sp"
                 android:fontFamily="sans-serif-medium"
@@ -354,9 +356,9 @@
                     android:rotation="-90"
                     android:max="60"
                     android:progress="0"
-                    android:progressTint="#FB542B"
+                    android:progressTint="@color/accent_orange"
                     android:progressBackgroundTint="#55FFFFFF"
-                    android:thumbTint="#FB542B" />
+                    android:thumbTint="@color/accent_orange" />
             </FrameLayout>
         </LinearLayout>
     </FrameLayout>

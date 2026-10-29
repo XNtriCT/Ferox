@@ -4,11 +4,13 @@
  * Run with:  npx electron scripts/test_adblocker.js
  *
  * Covers:
- *   1. Baseline engine parsing and filter matching (ads blocked, legit allowed)
+ *   1. Brave adblock-rust engine parsing and filter matching (ads blocked,
+ *      legit media allowed)
  *   2. Document-start preload injection of cosmetic filters
  *   3. End-to-end session network blocking
  *   4. Shields on/off toggle
- *   5. YouTube anti-adblock shield installation at document-start
+ *   5. Graceful stray-ad handling: skip button clicked, playback untouched
+ *   6. YouTube anti-adblock shield installation at document-start
  */
 
 'use strict';
@@ -19,7 +21,6 @@ const path = require('path');
 const fs = require('fs');
 const assert = require('assert');
 const BraveShieldsEngine = require('../engine/shields/adblocker');
-const { Request } = require('@ghostery/adblocker-electron');
 
 app.disableHardwareAcceleration();
 
@@ -35,13 +36,8 @@ function check(name, fn) {
   }
 }
 
-function requestFor(url, type = 'script', sourceUrl = YT_PAGE) {
-  return Request.fromRawDetails({
-    url,
-    type,
-    sourceUrl,
-    requestId: `${Math.random()}`
-  });
+function engineCheck(shields, url, type = 'script', sourceUrl = YT_PAGE) {
+  return shields.engine.check(url, sourceUrl, type, 'get', false);
 }
 
 function sleep(ms) {
@@ -55,25 +51,23 @@ async function main() {
   /* 1. Engine matching ---------------------------------------------------- */
   check('baseline engine has filters', () => assert.ok(shields.ruleCount > 80, `rules=${shields.ruleCount}`));
   check('google ads script blocked', () =>
-    assert.ok(shields.engine.match(requestFor('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js')).match));
+    assert.ok(engineCheck(shields, 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js')));
   check('doubleclick blocked', () =>
-    assert.ok(shields.engine.match(requestFor('https://securepubads.g.doubleclick.net/tag/js/gpt.js')).match));
+    assert.ok(engineCheck(shields, 'https://securepubads.g.doubleclick.net/tag/js/gpt.js')));
   check('youtube api/stats/ads blocked', () =>
-    assert.ok(shields.engine.match(requestFor('https://www.youtube.com/api/stats/ads?ver=2')).match));
+    assert.ok(engineCheck(shields, 'https://www.youtube.com/api/stats/ads?ver=2')));
   check('youtube player/ad_break blocked', () =>
-    assert.ok(shields.engine.match(requestFor('https://www.youtube.com/youtubei/v1/player/ad_break?key=x')).match));
+    assert.ok(engineCheck(shields, 'https://www.youtube.com/youtubei/v1/player/ad_break?key=x')));
   check('youtube midroll info blocked', () =>
-    assert.ok(shields.engine.match(requestFor('https://www.youtube.com/get_midroll_info?x=1')).match));
+    assert.ok(engineCheck(shields, 'https://www.youtube.com/get_midroll_info?x=1')));
   check('youtube player API still allowed', () =>
-    assert.ok(!shields.engine.match(requestFor('https://www.youtube.com/youtubei/v1/player?key=x')).match));
+    assert.ok(!engineCheck(shields, 'https://www.youtube.com/youtubei/v1/player?key=x')));
   check('googlevideo stream still allowed', () =>
     assert.ok(
-      !shields.engine.match(
-        requestFor('https://rr1---sn-abc.googlevideo.com/videoplayback?expire=1', 'media')
-      ).match
+      !engineCheck(shields, 'https://rr1---sn-abc.googlevideo.com/videoplayback?expire=1', 'media')
     ));
   check('youtube static assets still allowed', () =>
-    assert.ok(!shields.engine.match(requestFor('https://www.youtube.com/s/desktop/abc/jsbin/desktop_polymer.vflset/desktop_polymer.js')).match));
+    assert.ok(!engineCheck(shields, 'https://www.youtube.com/s/desktop/abc/jsbin/desktop_polymer.vflset/desktop_polymer.js')));
 
   /* 2. Cosmetics ---------------------------------------------------------- */
   const ytCosmetics = shields.getCosmeticsForUrl(YT_PAGE);
@@ -151,7 +145,7 @@ async function main() {
     assert.ok(preloadState.shieldStyles > 0 && preloadState.styleText.includes('adsbygoogle'), JSON.stringify(preloadState).slice(0, 200)));
   preloadWindow.destroy();
 
-  /* 6. Fast ad hard-skip state machine ------------------------------------ */
+  /* 6. Graceful stray-ad handling (skip clicked, playback untouched) ------- */
   try {
     const adWindow = new BrowserWindow({
       show: false,
@@ -178,7 +172,7 @@ async function main() {
       'utf8'
     );
     await adWindow.webContents.executeJavaScript(ytScript);
-    await sleep(400);
+    await sleep(500);
     const adState = await adWindow.webContents.executeJavaScript(`
       (function () {
         var v = document.querySelector('video');
@@ -191,31 +185,28 @@ async function main() {
         };
       })()
     `);
-    check('ad is muted + accelerated instantly', () =>
-      assert.ok(adState.muted === true && adState.rate >= 16, JSON.stringify(adState)));
-    check('ad media force-seeked to its end', () =>
-      assert.ok(adState.seeks > 0 && adState.lastSeek === 31, JSON.stringify(adState)));
     check('ad skip button auto-clicked', () => assert.ok(adState.clicks > 0, JSON.stringify(adState)));
+    check('playback rate never mutated (no 16x hack)', () =>
+      assert.ok(adState.rate === 1, JSON.stringify(adState)));
+    check('no forced seeks during ad', () =>
+      assert.ok(adState.seeks === 0, JSON.stringify(adState)));
+    check('audio never muted by shields', () =>
+      assert.ok(adState.muted === false, JSON.stringify(adState)));
 
     await adWindow.webContents.executeJavaScript(
       `document.getElementById('movie_player').classList.remove('ad-showing'); true;`
     );
-    await sleep(400);
-    const postAdState = await adWindow.webContents.executeJavaScript(`
-      (function () {
-        var v = document.querySelector('video');
-        return { muted: v.muted, rate: v.playbackRate };
-      })()
-    `);
-    check('playback state restored after ad', () =>
-      assert.ok(postAdState.muted === false && Math.abs(postAdState.rate - 1) < 0.01, JSON.stringify(postAdState)));
+    await sleep(500);
+    const clicksWithoutAd = await adWindow.webContents.executeJavaScript('window.__skipClicks || 0');
+    check('ticker stops clicking once ad ends', () =>
+      assert.ok(clicksWithoutAd <= adState.clicks + 2, `${adState.clicks} -> ${clicksWithoutAd}`));
     adWindow.destroy();
   } catch (err) {
-    results.push(['FAIL', `ad skip state machine (${err.message})`]);
+    results.push(['FAIL', `stray-ad handling (${err.message})`]);
   }
   server.close();
 
-  /* 6. YouTube shield installed at document-start -------------------------- */
+  /* 7. YouTube shield installed at document-start -------------------------- */
   try {
     const ytWindow = new BrowserWindow({
       show: false,

@@ -107,7 +107,7 @@ class PlaybackService : Service() {
             .setOngoing(true)
             .setSilent(true)
             .setShowWhen(false)
-            .setColor(0xFFFB542B.toInt())
+            .setColor(0xFFF79A2E.toInt())
             .setPriority(NotificationCompat.PRIORITY_LOW)
         if (isPlaying) {
             builder.addAction(android.R.drawable.ic_media_pause, "Pause", toggleIntent)

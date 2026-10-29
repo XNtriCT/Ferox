@@ -8,3 +8,9 @@ android/.gradle/
 android/app/build/
 android/build/
 *.apk
+
+# machine-local / tooling
+android/local.properties
+.agents/
+.claude/
+skills-lock.json

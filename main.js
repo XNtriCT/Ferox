@@ -30,7 +30,7 @@ async function createWindow() {
     maximizable: true,
     minimizable: true,
     title: 'Ferox',
-    backgroundColor: '#121217',
+    backgroundColor: '#0d1017',
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -43,6 +43,31 @@ async function createWindow() {
 
   // Load the Ferox UI
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+
+  // Visual QA hook: FEROX_SCREENSHOT=<path> captures the window, then exits.
+  if (process.env.FEROX_SCREENSHOT) {
+    const captureWithRetry = async (attempt) => {
+      try {
+        if (!mainWindow || mainWindow.isDestroyed()) return app.exit(1);
+        if (!mainWindow.isVisible()) mainWindow.show();
+        const image = await mainWindow.webContents.capturePage();
+        const png = image.toPNG();
+        if (png.length > 1000) {
+          fs.writeFileSync(process.env.FEROX_SCREENSHOT, png);
+          console.log(`[Ferox] Screenshot saved (${png.length} bytes): ${process.env.FEROX_SCREENSHOT}`);
+          return app.exit(0);
+        }
+      } catch (err) {
+        console.error(`[Ferox] Screenshot attempt ${attempt} failed:`, err.message);
+      }
+      if (attempt >= 8) {
+        console.error('[Ferox] Screenshot gave up after retries');
+        return app.exit(1);
+      }
+      setTimeout(() => captureWithRetry(attempt + 1), 1000);
+    };
+    setTimeout(() => captureWithRetry(1), 7000);
+  }
 
   // Sync window maximize/unmaximize states to renderer
   mainWindow.on('maximize', () => {

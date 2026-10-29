@@ -19,7 +19,7 @@
   "author": "Ferox Project",
   "license": "MPL-2.0",
   "dependencies": {
-    "@ghostery/adblocker-electron": "^2.18.2",
+    "adblock-rs": "^0.13.5",
     "cross-fetch": "^4.1.0"
   },
   "devDependencies": {
@@ -38,7 +38,8 @@
       "renderer/**/*",
       "engine/**/*",
       "assets/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules/adblock-rs/target/**"
     ],
     "win": {
       "icon": "assets/icon.ico",
@@ -55,6 +56,7 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "artifactName": "Ferox-Setup.exe"
-    }
+    },
+    "npmRebuild": false
   }
 }

@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Translucent dark glass with brand outline (readouts & sliders). -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <corners android:radius="24dp" />
-    <solid android:color="#F2121218" />
+    <gradient
+        android:angle="270"
+        android:startColor="#F2161C28"
+        android:endColor="#F20E121B" />
     <stroke
         android:width="2dp"
-        android:color="#FB542B" />
+        android:color="#80F79A2E" />
 </shape>
