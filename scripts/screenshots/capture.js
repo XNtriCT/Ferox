@@ -48,7 +48,7 @@ async function main() {
     height: 840,
     show: false,
     frame: false,
-    backgroundColor: '#121217',
+    backgroundColor: '#0d1017',
     webPreferences: {
       preload: path.join(ROOT, 'preload.js'),
       webviewTag: true,

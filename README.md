@@ -4,13 +4,13 @@
   <img src="assets/logo.png" alt="Ferox Browser logo" width="180">
 </p>
 
-> A privacy-first **Brave Browser fork** with the full **Brave Shields** ad-blocking engine, a dedicated **single-tap 1x–4x playback speed toolbar**, brand-new **continuous mouse speed control** (lock on with a wheel-click and tune the speed by moving the mouse), and a matching **Android app** with a drag-and-hold speed bubble.
+> A privacy-first **Brave Browser fork** that runs Brave's **actual `adblock-rust` Shields engine** (the real Rust engine behind Brave's ad blocker, ~206k filter rules), a dedicated **single-tap 1x–4x playback speed toolbar**, brand-new **continuous mouse speed control** (lock on with a wheel-click and tune the speed by moving the mouse), and a matching **Android app** with a drag-and-hold speed bubble.
 
-![Ferox Browser](https://img.shields.io/badge/Ferox-Brave%20Fork-ff5500?style=for-the-badge&logo=brave)
+![Ferox Browser](https://img.shields.io/badge/Ferox-Brave%20Fork-f79a2e?style=for-the-badge&logo=brave)
 ![Version](https://img.shields.io/badge/Version-v1.2.0-orange?style=for-the-badge)
-![Ad Blocker](https://img.shields.io/badge/Brave%20Shields-Active-2ed573?style=for-the-badge)
+![Ad Blocker](https://img.shields.io/badge/Brave%20Shields-adblock--rust%20Engine-2ed573?style=for-the-badge)
 ![YouTube Speeds](https://img.shields.io/badge/Video%20Speeds-1x%20to%204x-ff7700?style=for-the-badge)
-![Mouse Speed](https://img.shields.io/badge/Mouse%20Speed%20Control-Wheel--Click%20Lock-fb542b?style=for-the-badge&logo=logitech)
+![Mouse Speed](https://img.shields.io/badge/Mouse%20Speed%20Control-Wheel--Click%20Lock-f79a2e?style=for-the-badge&logo=logitech)
 ![Android APK](https://img.shields.io/badge/Android%20APK-v1.2.0%20Available-green?style=for-the-badge&logo=android)
 ![Windows EXE](https://img.shields.io/badge/Windows%20EXE-Portable%20Ready-blue?style=for-the-badge&logo=windows)
 
@@ -31,7 +31,7 @@ The wheel-click mouse speed control tunes the video continuously while the close
 ![Mouse speed control](screenshots/02-mouse-speed-control.png)
 
 ### Single-tap speed toolbar with live active indicator
-The 1x–4x speed bar sits directly below the URL bar. The active speed glows in Brave Orange, both in the browser toolbar and inside the YouTube player.
+The 1x–4x speed bar sits directly below the URL bar. The active speed glows in the brand's warm orange gradient, both in the browser toolbar and inside the YouTube player.
 
 ![Speed toolbar](screenshots/01-speed-toolbar.png)
 
@@ -50,7 +50,7 @@ The 1x–4x speed bar sits directly below the URL bar. The active speed glows in
   - Mouse wheel **scrolling keeps working normally**; only the wheel *click* is reserved while locked.
 - **⚡ Linear Single-Tap Speed Toolbar (0.75x to 4x)**:
   - Instant one-tap speed buttons located directly below the URL bar: `0.75x`, `1x`, `1.25x`, `1.5x`, `1.75x`, `2x`, `2.25x`, `2.5x`, `2.75x`, `3x`, `3.5x`, `4x`.
-  - Live active indicator: the closest speed glows in Brave Orange (`#fb542b`).
+  - Live active indicator: the closest speed glows in brand orange (`#f79a2e`).
   - Extended keyboard shortcuts (`Shift + >` and `Shift + <`) scale smoothly up to **4x**.
   - Smooth audio pitch preservation (`preservesPitch = true`) keeping voices clear and natural.
   - Speed memory: remembers your preferred playback speed across sessions.
@@ -62,13 +62,16 @@ The 1x–4x speed bar sits directly below the URL bar. The active speed glows in
   - Full-screen live speed readout, haptic feedback, ad-skipping and background audio playback.
   - **Mini player & true fullscreen**: pressing back while a video plays shrinks it into a floating mini player — the feed stays exactly where you left it (no reload). Tap the mini player to expand, or use fullscreen video (auto-rotates to landscape) with hidden system bars and a vertical speed slider on the right edge that never covers the video.
   - **Background play**: audio keeps playing when you leave the app or lock the screen; the playback notification includes Pause/Play controls.
-- **🦁 Full Brave Shields Engine**:
-  - Blocks banner ads, tracking scripts, and popups.
-  - Automatically strips YouTube video ads (pre-rolls and mid-rolls).
-  - Real-time tracker & ad blocked counter in the Omnibox.
-- **🌐 Brave UI & Aesthetics**:
-  - Modern Brave dark theme with orange accents and glassmorphism.
-  - Multi-tab management with draggable tabs and fast keyboard navigation.
+- **🦁 Real Brave Shields Engine (official `adblock-rust`)**:
+  - Runs Brave's **own `adblock-rust` engine** (the npm binding Brave publishes) — the exact Rust engine that powers Brave Shields, not a look-alike.
+  - Loads Brave's default filter catalog: **30 lists** (EasyList, EasyPrivacy, uBO assets, Brave-specific + cookie/annoyance lists) → **~206,000 rules**, compiled in seconds and cached for instant startup.
+  - Three layers, like Brave: network request blocking, cosmetic CSS hiding, and scriptlet injection — plus Brave's resource library for `$redirect=` / `##+js()` rules.
+  - YouTube pre-rolls and mid-rolls never start (player ad data is pruned before the player reads it); anything that still slips through is auto-skipped gracefully — playback is **never** fast-forwarded or seeked.
+  - Live tracker & ad blocked counter in the Omnibox; bundled offline fallback filters so blocking never silently turns off.
+  - Android ships the same list catalog through its own `shouldInterceptRequest` filter engine (~46k+ rules on device).
+- **🌐 Modern Tactile UI**:
+  - Brand-identity dark theme: hue-shifted orange gradients, rounded controls, inner catch-lights and layered ambient shadows — no flat or cartoonish colors.
+  - Multi-tab management with framed tabs and fast keyboard navigation.
   - Omnibox with Brave Search integration.
   - Pop-ups requested by pages (middle-click / `target="_blank"`) open as **tabs in the same window**.
 
@@ -118,6 +121,7 @@ Install the latest APK from the [releases page](https://github.com/XNtriCT/Ferox
 ### Prerequisites
 - Node.js (v18 or newer)
 - npm
+- Rust toolchain ([rustup](https://rustup.rs)) — Brave's official `adblock-rust` engine compiles from source on the first `npm install`
 
 ### 1. Install dependencies
 ```bash
