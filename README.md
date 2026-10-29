@@ -7,18 +7,18 @@
 > A privacy-first **Brave Browser fork** that runs Brave's **actual `adblock-rust` Shields engine** (the real Rust engine behind Brave's ad blocker, ~206k filter rules), a dedicated **single-tap 1x–4x playback speed toolbar**, brand-new **continuous mouse speed control** (lock on with a wheel-click and tune the speed by moving the mouse), and a matching **Android app** with a drag-and-hold speed bubble.
 
 ![Ferox Browser](https://img.shields.io/badge/Ferox-Brave%20Fork-f79a2e?style=for-the-badge&logo=brave)
-![Version](https://img.shields.io/badge/Version-v1.2.0-orange?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-v1.3.0-orange?style=for-the-badge)
 ![Ad Blocker](https://img.shields.io/badge/Brave%20Shields-adblock--rust%20Engine-2ed573?style=for-the-badge)
 ![YouTube Speeds](https://img.shields.io/badge/Video%20Speeds-1x%20to%204x-ff7700?style=for-the-badge)
 ![Mouse Speed](https://img.shields.io/badge/Mouse%20Speed%20Control-Wheel--Click%20Lock-f79a2e?style=for-the-badge&logo=logitech)
-![Android APK](https://img.shields.io/badge/Android%20APK-v1.2.0%20Available-green?style=for-the-badge&logo=android)
+![Android APK](https://img.shields.io/badge/Android%20APK-v1.3.0%20Available-green?style=for-the-badge&logo=android)
 ![Windows EXE](https://img.shields.io/badge/Windows%20EXE-Portable%20Ready-blue?style=for-the-badge&logo=windows)
 
 ### 🔗 Downloads & Releases
 
 * **💻 Windows Instant Portable**: [`Ferox.exe`](Ferox.exe) — extracts once on first run, then **opens instantly**; also available as [`Ferox.lnk`](Ferox.lnk) shortcut
-* **📦 Windows Installer**: [`Ferox-Setup.exe`](https://github.com/XNtriCT/Ferox/releases/download/v1.2.0/Ferox-Setup.exe)
-* **📱 Android APK (v1.2.0)**: [Download Ferox-Android-v1.2.0.apk](https://github.com/XNtriCT/Ferox/releases/download/v1.2.0/Ferox-Android-v1.2.0.apk)
+* **📦 Windows Installer**: [`Ferox-Setup.exe`](https://github.com/XNtriCT/Ferox/releases/download/v1.3.0/Ferox-Setup.exe)
+* **📱 Android APK (v1.3.0)**: [Download Ferox-Android-v1.3.0.apk](https://github.com/XNtriCT/Ferox/releases/download/v1.3.0/Ferox-Android-v1.3.0.apk)
 * **🐙 GitHub Repository**: [https://github.com/XNtriCT/Ferox](https://github.com/XNtriCT/Ferox)
 
 ---
@@ -54,7 +54,7 @@ The 1x–4x speed bar sits directly below the URL bar. The active speed glows in
   - Extended keyboard shortcuts (`Shift + >` and `Shift + <`) scale smoothly up to **4x**.
   - Smooth audio pitch preservation (`preservesPitch = true`) keeping voices clear and natural.
   - Speed memory: remembers your preferred playback speed across sessions.
-- **📱 Ferox for Android (v1.2.0)**:
+- **📱 Ferox for Android (v1.3.0)**:
   - Compact **speed selection bar on top**, directly below the URL space, matching the desktop web app.
   - Prominent **drag-and-hold speed bubble** (pulsing globule animation) docked between the *next* and *Brave Search* buttons.
   - Tap and hold the bubble, drag your finger anywhere on screen: **right = faster, left = slower**, fully continuous **1x → 4x**.
